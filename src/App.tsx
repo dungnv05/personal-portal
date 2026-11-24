@@ -29,6 +29,8 @@ import {
   hasNextParam,
   resolveNextTarget,
 } from './utils/nextParam'
+import { Turnstile } from './components/Turnstile'
+import { hasTurnstileSiteKey } from './utils/turnstile'
 import './App.css'
 
 type AuthMessage = {
@@ -56,6 +58,7 @@ type TechStackItem = {
 function App() {
   const currentSearch = typeof window !== 'undefined' ? window.location.search : ''
   const nextHintHost = getNextTargetLabel(currentSearch)
+  const captchaEnabled = hasTurnstileSiteKey()
 
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(() => nextHintHost !== null)
@@ -66,6 +69,33 @@ function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [authMessage, setAuthMessage] = useState<AuthMessage | null>(null)
+  const [signInCaptchaToken, setSignInCaptchaToken] = useState<string | null>(null)
+  const [signUpCaptchaToken, setSignUpCaptchaToken] = useState<string | null>(null)
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
+
+  const activeCaptchaToken = isSignUp ? signUpCaptchaToken : signInCaptchaToken
+  const isSubmitDisabled = authLoading || (captchaEnabled && !activeCaptchaToken)
+
+  const openSignInModal = () => {
+    setIsSignUp(false)
+    setAuthMessage(null)
+    setSignInCaptchaToken(null)
+    setSignUpCaptchaToken(null)
+    setShowAuthModal(true)
+  }
+
+  const closeAuthModal = () => {
+    setShowAuthModal(false)
+    setSignInCaptchaToken(null)
+    setSignUpCaptchaToken(null)
+  }
+
+  const switchAuthMode = (nextIsSignUp: boolean) => {
+    setIsSignUp(nextIsSignUp)
+    setAuthMessage(null)
+    setSignInCaptchaToken(null)
+    setSignUpCaptchaToken(null)
+  }
 
   useEffect(() => {
     let active = true
@@ -98,19 +128,32 @@ function App() {
 
   const handleAuthSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (captchaEnabled && !activeCaptchaToken) {
+      setAuthMessage({ type: 'error', text: 'Vui lòng hoàn tất xác minh CAPTCHA.' })
+      return
+    }
+
     setAuthLoading(true)
     setAuthMessage(null)
 
     try {
       if (isSignUp) {
-        const { error } = await signUpWithEmail(authEmail, authPassword)
+        const { error } = await signUpWithEmail(
+          authEmail,
+          authPassword,
+          signUpCaptchaToken ?? undefined,
+        )
         if (error) throw error
         setAuthMessage({ type: 'success', text: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận (nếu có).' })
       } else {
-        const { data, error } = await signInWithEmail(authEmail, authPassword)
+        const { data, error } = await signInWithEmail(
+          authEmail,
+          authPassword,
+          signInCaptchaToken ?? undefined,
+        )
         if (error) throw error
         setCurrentUser(data.user)
-        setShowAuthModal(false)
+        closeAuthModal()
         if (hasNextParam(window.location.search)) {
           window.location.assign(resolveNextTarget(window.location.search))
         }
@@ -119,6 +162,14 @@ function App() {
       const message = err instanceof Error ? err.message : 'Thao tác thất bại. Vui lòng thử lại.'
       setAuthMessage({ type: 'error', text: message })
     } finally {
+      if (isSignUp) {
+        setSignUpCaptchaToken(null)
+      } else {
+        setSignInCaptchaToken(null)
+      }
+      if (captchaEnabled) {
+        setTurnstileResetKey((prev) => prev + 1)
+      }
       setAuthLoading(false)
     }
   }
@@ -227,10 +278,7 @@ function App() {
                 type="button"
                 className="btn-launch"
                 style={{ marginTop: 0, padding: '0.45rem 0.9rem' }}
-                onClick={() => {
-                  setIsSignUp(false)
-                  setShowAuthModal(true)
-                }}
+                onClick={openSignInModal}
               >
                 <LogIn size={15} /> Đăng nhập
               </button>
@@ -340,11 +388,11 @@ function App() {
 
       {/* Auth Modal */}
       {showAuthModal && (
-        <div className="auth-modal-overlay" onClick={() => setShowAuthModal(false)}>
+        <div className="auth-modal-overlay" onClick={closeAuthModal}>
           <div className="cyber-card auth-modal-card" onClick={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
             <div className="auth-modal-header">
               <h3>{isSignUp ? <UserPlus size={20} /> : <Lock size={20} />} {isSignUp ? 'Tạo Tài Khoản YunDev' : 'Đăng Nhập YunDev'}</h3>
-              <button type="button" className="btn-close" onClick={() => setShowAuthModal(false)}>
+              <button type="button" className="btn-close" onClick={closeAuthModal}>
                 <X size={18} />
               </button>
             </div>
@@ -384,16 +432,30 @@ function App() {
                 />
               </div>
 
-              <button type="submit" className="btn-launch btn-auth-submit" disabled={authLoading}>
+              {isSignUp ? (
+                <Turnstile
+                  key={`signup-${turnstileResetKey}`}
+                  theme="dark"
+                  onToken={setSignUpCaptchaToken}
+                />
+              ) : (
+                <Turnstile
+                  key={`signin-${turnstileResetKey}`}
+                  theme="dark"
+                  onToken={setSignInCaptchaToken}
+                />
+              )}
+
+              <button type="submit" className="btn-launch btn-auth-submit" disabled={isSubmitDisabled}>
                 {authLoading ? 'Đang xử lý...' : (isSignUp ? 'Đăng ký ngay' : 'Đăng nhập')}
               </button>
             </form>
 
             <div className="auth-modal-footer">
               {isSignUp ? (
-                <span>Đã có tài khoản? <button type="button" className="auth-switch-link" onClick={() => setIsSignUp(false)}>Đăng nhập ngay</button></span>
+                <span>Đã có tài khoản? <button type="button" className="auth-switch-link" onClick={() => switchAuthMode(false)}>Đăng nhập ngay</button></span>
               ) : (
-                <span>Chưa có tài khoản? <button type="button" className="auth-switch-link" onClick={() => setIsSignUp(true)}>Đăng ký tài khoản</button></span>
+                <span>Chưa có tài khoản? <button type="button" className="auth-switch-link" onClick={() => switchAuthMode(true)}>Đăng ký tài khoản</button></span>
               )}
             </div>
           </div>

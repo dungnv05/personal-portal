@@ -187,12 +187,23 @@ if (isDummyUrl && typeof fetch === 'function') {
 export async function signUpWithEmail(
   email: string,
   password: string,
+  captchaToken?: string | null,
 ): ReturnType<SupabaseClient['auth']['signUp']> {
-  return await supabase.auth.signUp({ email, password })
+  const credentials = captchaToken
+    ? { email, password, options: { captchaToken } }
+    : { email, password }
+  return await supabase.auth.signUp(credentials)
 }
 
-export async function signInWithEmail(email: string, password: string): Promise<SignInResult> {
-  const res = await supabase.auth.signInWithPassword({ email, password })
+export async function signInWithEmail(
+  email: string,
+  password: string,
+  captchaToken?: string | null,
+): Promise<SignInResult> {
+  const credentials = captchaToken
+    ? { email, password, options: { captchaToken } }
+    : { email, password }
+  const res = await supabase.auth.signInWithPassword(credentials)
   if (res.error) {
     return {
       data: { user: null },

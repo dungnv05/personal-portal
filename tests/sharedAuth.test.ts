@@ -25,6 +25,14 @@ type JsdomHandle = {
   }
 }
 
+type AuthCredentialsArg = {
+  email: string
+  password: string
+  options?: {
+    captchaToken?: string
+  }
+}
+
 const mockState = vi.hoisted(() => {
   const clientCalls: RecordedClientCall[] = []
   let nextSignInError: Error | null = null
@@ -46,12 +54,12 @@ const mockState = vi.hoisted(() => {
     user: createMockUser(email),
   })
 
-  const signUp = vi.fn(async ({ email }: { email: string; password: string }) => {
+  const signUp = vi.fn(async ({ email }: AuthCredentialsArg) => {
     const user = createMockUser(email)
     return { data: { user, session: null }, error: null }
   })
 
-  const signInWithPassword = vi.fn(async ({ email }: { email: string; password: string }) => {
+  const signInWithPassword = vi.fn(async ({ email }: AuthCredentialsArg) => {
     if (nextSignInError) {
       const error = nextSignInError
       nextSignInError = null
@@ -237,6 +245,48 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
     expect(localStorage.length).toBe(0)
     expect(localStorage.getItem(LEGACY_SESSION_KEY)).toBeNull()
     expect(localStorage.getItem(LEGACY_TOKEN_KEY)).toBeNull()
+  })
+
+  it('forwards captchaToken in options for signInWithEmail and signUpWithEmail and omits options when falsy', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/session') {
+        return jsonResponse(
+          { ok: true, user: { id: 'user-123', email: 'yun@yundev.space' } },
+          200,
+        )
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const auth = await loadSharedAuth()
+
+    await auth.signInWithEmail('yun@yundev.space', 'secret-password', 'cf-signin-token')
+    expect(mockState.signInWithPassword).toHaveBeenLastCalledWith({
+      email: 'yun@yundev.space',
+      password: 'secret-password',
+      options: { captchaToken: 'cf-signin-token' },
+    })
+
+    await auth.signInWithEmail('yun@yundev.space', 'secret-password', '')
+    expect(mockState.signInWithPassword).toHaveBeenLastCalledWith({
+      email: 'yun@yundev.space',
+      password: 'secret-password',
+    })
+
+    await auth.signUpWithEmail('yun@yundev.space', 'secret-password', 'cf-signup-token')
+    expect(mockState.signUp).toHaveBeenLastCalledWith({
+      email: 'yun@yundev.space',
+      password: 'secret-password',
+      options: { captchaToken: 'cf-signup-token' },
+    })
+
+    await auth.signUpWithEmail('yun@yundev.space', 'secret-password', null)
+    expect(mockState.signUp).toHaveBeenLastCalledWith({
+      email: 'yun@yundev.space',
+      password: 'secret-password',
+    })
   })
 
   it('signs out locally and surfaces an error when /api/auth/session returns a non-200 status', async () => {
