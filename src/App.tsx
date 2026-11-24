@@ -24,6 +24,11 @@ import {
   signUpWithEmail,
   type SessionUser,
 } from './utils/sharedAuth'
+import {
+  getNextTargetLabel,
+  hasNextParam,
+  resolveNextTarget,
+} from './utils/nextParam'
 import './App.css'
 
 type AuthMessage = {
@@ -49,8 +54,11 @@ type TechStackItem = {
 }
 
 function App() {
+  const currentSearch = typeof window !== 'undefined' ? window.location.search : ''
+  const nextHintHost = getNextTargetLabel(currentSearch)
+
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null)
-  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(() => nextHintHost !== null)
   const [isSignUp, setIsSignUp] = useState(false)
 
   // Auth Form State
@@ -103,6 +111,9 @@ function App() {
         if (error) throw error
         setCurrentUser(data.user)
         setShowAuthModal(false)
+        if (hasNextParam(window.location.search)) {
+          window.location.assign(resolveNextTarget(window.location.search))
+        }
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Thao tác thất bại. Vui lòng thử lại.'
@@ -342,6 +353,12 @@ function App() {
               <div className={`auth-alert ${authMessage.type === 'error' ? 'auth-alert-error' : 'auth-alert-success'}`}>
                 {authMessage.text}
               </div>
+            )}
+
+            {!isSignUp && nextHintHost && (
+              <p className="auth-next-hint" role="status">
+                {`Sign in to continue to ${nextHintHost}`}
+              </p>
             )}
 
             <form onSubmit={handleAuthSubmit} className="auth-form">
