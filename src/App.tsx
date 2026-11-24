@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import {
   WalletCards,
   Terminal,
@@ -7,9 +7,6 @@ import {
   Kanban,
   ShieldAlert,
   ExternalLink,
-  UserCheck,
-  LogOut,
-  LogIn,
   X,
   Lock,
   UserPlus,
@@ -18,11 +15,11 @@ import {
 } from 'lucide-react'
 import {
   getSessionUser,
-  logout,
   signInWithEmail,
   signUpWithEmail,
   type SessionUser,
 } from './utils/sharedAuth'
+import type { YunHeader, YunHeaderAuthChangeDetail } from './yun-header'
 import { getNextTargetLabel } from './utils/nextParam'
 import { resolveNextUrl } from './utils/nextUrl'
 import { Turnstile } from './components/Turnstile'
@@ -53,12 +50,18 @@ type TechStackItem = {
 
 function App() {
   const currentSearch = typeof window !== 'undefined' ? window.location.search : ''
+  const searchParams = new URLSearchParams(currentSearch)
+  const authParam = searchParams.get('auth')
+  const isProfileView = searchParams.get('view') === 'profile'
   const nextHintHost = getNextTargetLabel(currentSearch)
   const captchaEnabled = hasTurnstileSiteKey()
 
+  const headerRef = useRef<YunHeader | null>(null)
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null)
-  const [showAuthModal, setShowAuthModal] = useState(() => nextHintHost !== null)
-  const [isSignUp, setIsSignUp] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(
+    () => nextHintHost !== null || authParam === 'signin' || authParam === 'signup',
+  )
+  const [isSignUp, setIsSignUp] = useState(() => authParam === 'signup')
 
   // Auth Form State
   const [authEmail, setAuthEmail] = useState('')
@@ -74,6 +77,14 @@ function App() {
 
   const openSignInModal = () => {
     setIsSignUp(false)
+    setAuthMessage(null)
+    setSignInCaptchaToken(null)
+    setSignUpCaptchaToken(null)
+    setShowAuthModal(true)
+  }
+
+  const openSignUpModal = () => {
+    setIsSignUp(true)
     setAuthMessage(null)
     setSignInCaptchaToken(null)
     setSignUpCaptchaToken(null)
@@ -122,6 +133,48 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const headerEl = headerRef.current
+    if (!headerEl) {
+      return
+    }
+
+    const onSignInClick = (event: Event) => {
+      event.preventDefault()
+      openSignInModal()
+    }
+
+    const onSignUpClick = (event: Event) => {
+      event.preventDefault()
+      openSignUpModal()
+    }
+
+    const onLogout = () => {
+      setCurrentUser(null)
+    }
+
+    const onAuthChange = (event: Event) => {
+      const detail = (event as CustomEvent<YunHeaderAuthChangeDetail>).detail
+      if (detail?.user) {
+        setCurrentUser({ id: detail.user.id, email: detail.user.email })
+      } else {
+        setCurrentUser(null)
+      }
+    }
+
+    headerEl.addEventListener('yh-signin-click', onSignInClick)
+    headerEl.addEventListener('yh-signup-click', onSignUpClick)
+    headerEl.addEventListener('yh-logout', onLogout)
+    headerEl.addEventListener('yh-auth-change', onAuthChange)
+
+    return () => {
+      headerEl.removeEventListener('yh-signin-click', onSignInClick)
+      headerEl.removeEventListener('yh-signup-click', onSignUpClick)
+      headerEl.removeEventListener('yh-logout', onLogout)
+      headerEl.removeEventListener('yh-auth-change', onAuthChange)
+    }
+  }, [])
+
   const handleAuthSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (captchaEnabled && !activeCaptchaToken) {
@@ -145,6 +198,7 @@ function App() {
           window.location.assign(nextTarget)
         } else {
           setAuthMessage({ type: 'success', text: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận (nếu có).' })
+          void headerRef.current?.refresh()
         }
       } else {
         const { data, error } = await signInWithEmail(
@@ -159,6 +213,7 @@ function App() {
         } else {
           setCurrentUser(data.user)
           closeAuthModal()
+          void headerRef.current?.refresh()
         }
       }
     } catch (err: unknown) {
@@ -175,11 +230,6 @@ function App() {
       }
       setAuthLoading(false)
     }
-  }
-
-  const handleLogout = async () => {
-    await logout()
-    setCurrentUser(null)
   }
 
   const handleEmailChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -251,57 +301,59 @@ function App() {
     <>
       <div className="portal-wrapper">
         {/* Navigation / Header */}
-        <header className="portal-header">
-          <div className="portal-header-inner">
-            <div className="brand">
-              <div className="brand-icon">
-                <Terminal />
-              </div>
-              <span className="brand-name">YunDev.space</span>
+        <yun-header
+          ref={headerRef}
+          app="portal"
+          auth-base={typeof window !== 'undefined' ? window.location.origin : 'https://www.yundev.space'}
+          profile-url="/?view=profile"
+        >
+          <div slot="brand" className="brand">
+            <div className="brand-icon">
+              <Terminal />
             </div>
+            <span className="brand-name">YunDev.space</span>
+          </div>
 
-            <div className="social-links">
+          <div slot="actions" className="social-links">
+            <a
+              href="https://github.com/dungnv05"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="social-btn"
+              aria-label="GitHub"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+              </svg>
+            </a>
+          </div>
+        </yun-header>
+
+        <main id="main" className="portal-main">
+          {isProfileView && (
+            <section className="cyber-card profile-stub" aria-labelledby="profile-heading">
+              <h2 id="profile-heading" className="section-title">Hồ sơ</h2>
               {currentUser ? (
-                <div className="user-session">
-                  <span className="tag-badge user-badge" title={currentUser.email ?? undefined}>
-                    <UserCheck size={14} /> {currentUser.email}
-                  </span>
-                  <button
-                    type="button"
-                    className="social-btn"
-                    onClick={handleLogout}
-                    title="Đăng xuất"
-                    aria-label="Đăng xuất"
-                  >
-                    <LogOut size={16} />
-                  </button>
+                <div className="profile-stub-body">
+                  <div className="profile-stub-avatar" aria-hidden="true">
+                    {(currentUser.email?.split('@')[0]?.[0] ?? 'U').toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="profile-stub-name">{currentUser.email?.split('@')[0] ?? 'User'}</p>
+                    {currentUser.email && <p className="profile-stub-email">{currentUser.email}</p>}
+                    <p className="profile-stub-note">Trang hồ sơ đầy đủ sẽ có trong bản cập nhật sau.</p>
+                  </div>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-launch"
-                  onClick={openSignInModal}
-                >
-                  <LogIn size={16} /> Đăng nhập
-                </button>
+                <div className="profile-stub-body">
+                  <p className="profile-stub-note">Vui lòng đăng nhập để xem hồ sơ của bạn.</p>
+                  <button type="button" className="btn btn-primary" onClick={openSignInModal}>
+                    Đăng nhập
+                  </button>
+                </div>
               )}
-
-              <a
-                href="https://github.com/dungnv05"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="social-btn"
-                aria-label="GitHub"
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-                </svg>
-              </a>
-            </div>
-          </div>
-        </header>
-
-        <main className="portal-main">
+            </section>
+          )}
           {/* Hero Section */}
           <section className="hero-section">
             <div className="hero-glow" aria-hidden="true"></div>

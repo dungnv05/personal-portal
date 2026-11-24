@@ -219,9 +219,27 @@ describe('Turnstile component', () => {
   })
 })
 
+function openSignInModalFromHeader(): void {
+  const header = document.querySelector('yun-header')
+  expect(header).not.toBeNull()
+  act(() => {
+    header?.dispatchEvent(
+      new CustomEvent('yh-signin-click', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      }),
+    )
+  })
+}
+
 describe('App login and signup forms with Turnstile', () => {
   beforeEach(() => {
     vi.unstubAllEnvs()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as Response),
+    )
     resetTurnstileLoaderForTests()
     clearTurnstileScripts()
     delete window.turnstile
@@ -230,6 +248,7 @@ describe('App login and signup forms with Turnstile', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     vi.unstubAllEnvs()
     resetTurnstileLoaderForTests()
     clearTurnstileScripts()
@@ -242,7 +261,7 @@ describe('App login and signup forms with Turnstile', () => {
 
     const { container } = render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: /Đăng nhập/i }))
+    openSignInModalFromHeader()
 
     const signInSubmit = container.querySelector<HTMLButtonElement>('button.btn-auth-submit')
     expect(signInSubmit).not.toBeNull()
@@ -273,7 +292,7 @@ describe('App login and signup forms with Turnstile', () => {
 
     const { container } = render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: /Đăng nhập/i }))
+    openSignInModalFromHeader()
 
     await waitFor(() => {
       expect(renderMock).toHaveBeenCalledTimes(1)
@@ -324,7 +343,7 @@ describe('App login and signup forms with Turnstile', () => {
 
     const { container } = render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: /Đăng nhập/i }))
+    openSignInModalFromHeader()
 
     await waitFor(() => {
       expect(renderMock).toHaveBeenCalledTimes(1)

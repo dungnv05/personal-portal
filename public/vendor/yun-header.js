@@ -1,0 +1,463 @@
+function e(e) {
+	return typeof e == "object" && !!e;
+}
+function t(e) {
+	if (typeof e != "string") return null;
+	let t = e.trim();
+	return t.length > 0 ? t : null;
+}
+function n(e) {
+	return e && (e.startsWith("/") || e.startsWith("https://") || e.startsWith("http://")) ? e : null;
+}
+function r(e) {
+	let t = e.trim().split(/\s+/).filter(Boolean).slice(0, 2);
+	return t.length === 0 ? "U" : t.map((e) => Array.from(e)[0] ?? "").join("").toUpperCase();
+}
+function i(i) {
+	if (!e(i) || i.ok === !1) return null;
+	let a = i.user;
+	if (!e(a)) return null;
+	let o = t(a.id);
+	if (!o) return null;
+	let s = t(a.email), c = e(a.user_metadata) ? a.user_metadata : null, l = t(a.display_name) ?? (c ? t(c.full_name) : null), u = s && s.split("@")[0]?.trim() || null, d = l ?? u ?? "User";
+	return {
+		id: o,
+		email: s,
+		displayName: d,
+		avatarUrl: n(t(a.avatar_url) ?? (c ? t(c.avatar_url) : null)),
+		initials: r(d)
+	};
+}
+function a() {
+	if (typeof document > "u" || !document.cookie) return "";
+	let e = "";
+	for (let t of document.cookie.split(";")) {
+		let n = t.indexOf("=");
+		if (n <= 0 || t.slice(0, n).trim() !== "csrf") continue;
+		let r = t.slice(n + 1).trim();
+		try {
+			e = decodeURIComponent(r);
+		} catch {
+			e = r;
+		}
+	}
+	return e;
+}
+function o(e, t) {
+	let n = "http://www.w3.org/2000/svg", r = document.createElementNS(n, "svg");
+	r.setAttribute("viewBox", "0 0 24 24"), r.setAttribute("width", "18"), r.setAttribute("height", "18"), r.setAttribute("fill", "none"), r.setAttribute("stroke", "currentColor"), r.setAttribute("stroke-width", "2"), r.setAttribute("stroke-linecap", "round"), r.setAttribute("stroke-linejoin", "round"), r.setAttribute("aria-hidden", "true"), t && r.setAttribute("class", t);
+	let i = document.createElementNS(n, "path");
+	return i.setAttribute("d", e), r.appendChild(i), r;
+}
+function s(e) {
+	let t = document.createElement("span");
+	if (t.className = "yh-avatar", t.setAttribute("aria-hidden", "true"), e.avatarUrl) {
+		let n = document.createElement("img");
+		n.src = e.avatarUrl, n.alt = "", t.appendChild(n);
+	} else t.textContent = e.initials;
+	return t;
+}
+var c = class extends HTMLElement {
+	static get observedAttributes() {
+		return [
+			"app",
+			"auth-base",
+			"variant",
+			"profile-url",
+			"hide-account",
+			"skip-target"
+		];
+	}
+	_state = "loading";
+	_lastStableState = "loading";
+	_user = null;
+	_menuOpen = !1;
+	_sheetOpen = !1;
+	_loggingOut = !1;
+	_abortController = null;
+	_loadingTimer = null;
+	_lastAnnouncedAuthKey = null;
+	_rendered = !1;
+	_shadow;
+	_skipLink;
+	_accountDesktop;
+	_expiredNotice;
+	_mobileToggleBtn;
+	_sheetBackdrop;
+	_sheetDialog;
+	_sheetCloseBtn;
+	_sheetNav;
+	_sheetAccount;
+	_navSlot;
+	_liveRegion;
+	_accountButtonEl = null;
+	_menuEl = null;
+	_onWindowFocus = () => {
+		this.refresh();
+	};
+	_onVisibilityChange = () => {
+		document.visibilityState === "visible" && this.refresh();
+	};
+	_onDocumentClick = (e) => {
+		this._menuOpen && (e.composedPath().includes(this._accountDesktop) || this._setMenuOpen(!1, !1));
+	};
+	_onDocumentKeyDown = (e) => {
+		if (this._sheetOpen && e.key === "Escape") {
+			e.preventDefault(), this._setSheetOpen(!1, !0);
+			return;
+		}
+		this._menuOpen && e.key === "Escape" && (e.preventDefault(), this._setMenuOpen(!1, !0));
+	};
+	constructor() {
+		super(), this._shadow = this.attachShadow({ mode: "open" });
+	}
+	get state() {
+		return this._state;
+	}
+	get user() {
+		return this._user;
+	}
+	get authBase() {
+		let e = this.getAttribute("auth-base")?.trim() || "https://www.yundev.space";
+		return e.endsWith("/") ? e.slice(0, -1) : e;
+	}
+	get profileUrl() {
+		let e = this.getAttribute("profile-url")?.trim();
+		return e && e.length > 0 ? e : `${this.authBase}/?view=profile`;
+	}
+	get hideAccount() {
+		return this.hasAttribute("hide-account");
+	}
+	get skipTarget() {
+		let e = this.getAttribute("skip-target")?.trim();
+		return e && e.length > 0 ? e : "#main";
+	}
+	connectedCallback() {
+		this._ensureDom(), this._syncAttributes(), window.addEventListener("focus", this._onWindowFocus), document.addEventListener("visibilitychange", this._onVisibilityChange), document.addEventListener("click", this._onDocumentClick), document.addEventListener("keydown", this._onDocumentKeyDown), this.refresh();
+	}
+	disconnectedCallback() {
+		window.removeEventListener("focus", this._onWindowFocus), document.removeEventListener("visibilitychange", this._onVisibilityChange), document.removeEventListener("click", this._onDocumentClick), document.removeEventListener("keydown", this._onDocumentKeyDown), this._abortPending();
+	}
+	attributeChangedCallback(e, t, n) {
+		t === n || !this._rendered || (this._syncAttributes(), e === "auth-base" ? this.refresh() : (e === "hide-account" || e === "profile-url") && this._renderAccountRegions());
+	}
+	async refresh() {
+		this._abortPending();
+		let e = new AbortController();
+		this._abortController = e;
+		let t = this._lastStableState === "signed-in";
+		this._state !== "signed-in" && (this._state = "loading", this._renderAccountRegions());
+		let n = !1;
+		this._loadingTimer = setTimeout(() => {
+			n = !0, e.abort("timeout");
+		}, 3e3);
+		try {
+			let n = await fetch(`${this.authBase}/api/auth/me`, {
+				method: "GET",
+				credentials: "include",
+				signal: e.signal
+			});
+			if (e.signal.aborted) return;
+			if (n.status === 200) {
+				let e = null;
+				try {
+					e = await n.json();
+				} catch {
+					e = null;
+				}
+				let r = i(e);
+				if (r) {
+					let e = this._lastStableState !== "signed-in" || this._user?.id !== r.id;
+					this._state = "signed-in", this._lastStableState = "signed-in", this._user = r, e && this._announce(`Đã đăng nhập với tên ${r.displayName}`);
+				} else this._applySignedOutOrExpired(t);
+			} else n.status === 401 ? this._applySignedOutOrExpired(t) : (this._state = "error", this._lastStableState = "error", this._user = null);
+		} catch {
+			if (n) this._state = "signed-out", this._lastStableState = "signed-out", this._user = null;
+			else if (e.signal.aborted) return;
+			else this._state = "error", this._lastStableState = "error", this._user = null;
+		} finally {
+			this._loadingTimer !== null && (clearTimeout(this._loadingTimer), this._loadingTimer = null), this._abortController === e && (this._abortController = null);
+		}
+		this._renderAccountRegions(), this._dispatchAuthChange();
+	}
+	_applySignedOutOrExpired(e) {
+		this._user = null, this._menuOpen = !1, e ? (this._state = "expired", this._lastStableState = "expired") : (this._state = "signed-out", this._lastStableState = "signed-out");
+	}
+	_abortPending() {
+		this._loadingTimer !== null && (clearTimeout(this._loadingTimer), this._loadingTimer = null), this._abortController &&= (this._abortController.abort("superseded"), null);
+	}
+	_ensureDom() {
+		if (this._rendered) return;
+		this._rendered = !0;
+		let e = document.createElement("style");
+		e.textContent = "\n:host {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 40;\n  font-family: var(--yh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);\n  color: var(--yh-ink, #F2EFF7);\n}\n\n*, *::before, *::after {\n  box-sizing: border-box;\n}\n\n.yh-bar {\n  position: relative;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n  min-height: 64px;\n  padding: 0 24px;\n  background: var(--yh-bg, #15121D);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  backdrop-filter: blur(12px);\n  -webkit-backdrop-filter: blur(12px);\n}\n\n:host([variant=\"overlay\"]) .yh-bar {\n  min-height: 48px;\n  background: color-mix(in srgb, var(--yh-bg, #15121D) 72%, transparent);\n  border-bottom-color: transparent;\n}\n\n.yh-skip-link {\n  position: absolute;\n  left: -9999px;\n  top: 8px;\n  z-index: 60;\n  padding: 10px 16px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.875rem;\n  font-weight: 600;\n  text-decoration: none;\n}\n\n.yh-skip-link:focus,\n.yh-skip-link:focus-visible {\n  left: 16px;\n}\n\n.yh-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-nav {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-right {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  flex-shrink: 0;\n}\n\n.yh-account-desktop {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  position: relative;\n}\n\n.yh-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 0 14px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid transparent;\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  line-height: 1;\n  cursor: pointer;\n  text-decoration: none;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;\n}\n\n.yh-btn:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-btn-text:hover:not(:disabled) {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-btn-primary {\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n}\n\n.yh-btn-primary:hover:not(:disabled) {\n  filter: brightness(1.06);\n}\n\n.yh-btn-icon {\n  padding: 0;\n  width: 44px;\n  height: 44px;\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-btn-icon:hover:not(:disabled) {\n  color: var(--yh-ink, #F2EFF7);\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-account-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 4px 10px 4px 6px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color 150ms ease, border-color 150ms ease;\n}\n\n.yh-account-btn:hover {\n  background: color-mix(in srgb, var(--yh-surface, #1D1927) 86%, var(--yh-ink, #F2EFF7));\n}\n\n.yh-avatar {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.8125rem;\n  font-weight: 700;\n}\n\n.yh-avatar img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n\n.yh-account-name {\n  max-width: 16ch;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-chevron {\n  width: 16px;\n  height: 16px;\n  flex-shrink: 0;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-menu {\n  position: absolute;\n  top: calc(100% + 8px);\n  right: 0;\n  min-width: 240px;\n  padding: 8px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-surface, #1D1927);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);\n  z-index: 50;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu[hidden] {\n  display: none;\n}\n\n.yh-menu-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 8px 10px 10px;\n}\n\n.yh-menu-identity {\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu-name {\n  font-size: 0.875rem;\n  font-weight: 600;\n  color: var(--yh-ink, #F2EFF7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-email {\n  font-size: 0.75rem;\n  color: var(--yh-muted, #B8B3C7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-divider {\n  height: 1px;\n  margin: 4px 0;\n  background: var(--yh-border, rgba(255, 255, 255, 0.1));\n  border: 0;\n}\n\n.yh-menu-item {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  min-height: 44px;\n  padding: 0 12px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n  border: 0;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 500;\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.yh-menu-item:hover:not(:disabled),\n.yh-menu-item:focus-visible {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-menu-item:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-skeleton {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 44px;\n  padding: 0 6px;\n}\n\n.yh-skeleton-circle {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-skeleton-bar {\n  width: 72px;\n  height: 14px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-error-inline {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.yh-muted-text {\n  font-size: 0.8125rem;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-expired-notice {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-wrap: wrap;\n  gap: 12px;\n  padding: 8px 24px;\n  background: var(--yh-surface, #1D1927);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  font-size: 0.875rem;\n  color: var(--yh-ink, #F2EFF7);\n}\n\n.yh-mobile-toggle {\n  display: none;\n}\n\n.yh-sheet-backdrop {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.52);\n  z-index: 60;\n  display: flex;\n  justify-content: flex-end;\n}\n\n.yh-sheet-backdrop[hidden] {\n  display: none;\n}\n\n.yh-sheet {\n  width: 85vw;\n  max-width: 360px;\n  height: 100%;\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  border-left: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  padding: 16px;\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n  overflow-y: auto;\n}\n\n.yh-sheet-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n.yh-sheet-title {\n  font-size: 1rem;\n  font-weight: 700;\n}\n\n.yh-sheet-nav {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.yh-sheet-nav:empty {\n  display: none;\n}\n\n.yh-sheet-account {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-top: 12px;\n  border-top: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n}\n\n.yh-sheet-account-actions {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.yh-sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n:focus-visible {\n  outline: 2px solid var(--yh-focus, #A78BFA);\n  outline-offset: 2px;\n}\n\n@media (min-width: 641px) and (max-width: 1023px) {\n  .yh-account-name {\n    display: none;\n  }\n}\n\n@media (max-width: 640px) {\n  .yh-bar {\n    min-height: 56px;\n    padding: 0 16px;\n  }\n\n  .yh-nav,\n  .yh-account-desktop {\n    display: none;\n  }\n\n  .yh-mobile-toggle {\n    display: inline-flex;\n  }\n\n  .yh-expired-notice {\n    padding: 8px 16px;\n  }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    transition: none !important;\n    animation: none !important;\n  }\n}\n";
+		let t = document.createElement("header");
+		t.setAttribute("part", "bar"), t.className = "yh-bar", this._skipLink = document.createElement("a"), this._skipLink.className = "yh-skip-link", this._skipLink.textContent = "Bỏ qua đến nội dung";
+		let n = document.createElement("div");
+		n.className = "yh-left";
+		let r = document.createElement("slot");
+		r.name = "brand", n.appendChild(r);
+		let i = document.createElement("nav");
+		i.className = "yh-nav", i.setAttribute("aria-label", "Điều hướng chính"), this._navSlot = document.createElement("slot"), this._navSlot.name = "nav", this._navSlot.addEventListener("slotchange", () => {
+			this._sheetOpen && this._syncMobileNavClone();
+		}), i.appendChild(this._navSlot);
+		let a = document.createElement("div");
+		a.className = "yh-right";
+		let s = document.createElement("slot");
+		s.name = "actions", this._accountDesktop = document.createElement("div"), this._accountDesktop.className = "yh-account-desktop", this._mobileToggleBtn = document.createElement("button"), this._mobileToggleBtn.type = "button", this._mobileToggleBtn.className = "yh-btn yh-btn-icon yh-mobile-toggle", this._mobileToggleBtn.setAttribute("aria-label", "Mở menu"), this._mobileToggleBtn.setAttribute("aria-expanded", "false"), this._mobileToggleBtn.appendChild(o("M4 6h16M4 12h16M4 18h16")), this._mobileToggleBtn.addEventListener("click", () => {
+			this._setSheetOpen(!this._sheetOpen, !1);
+		}), a.append(s, this._accountDesktop, this._mobileToggleBtn), t.append(this._skipLink, n, i, a), this._expiredNotice = document.createElement("div"), this._expiredNotice.className = "yh-expired-notice", this._expiredNotice.setAttribute("role", "status"), this._expiredNotice.hidden = !0;
+		let c = document.createElement("span");
+		c.textContent = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+		let l = document.createElement("button");
+		l.type = "button", l.className = "yh-btn yh-btn-primary", l.textContent = "Đăng nhập lại", l.addEventListener("click", () => {
+			this._handleAuthClick("signin");
+		}), this._expiredNotice.append(c, l), this._sheetBackdrop = document.createElement("div"), this._sheetBackdrop.className = "yh-sheet-backdrop", this._sheetBackdrop.hidden = !0, this._sheetBackdrop.addEventListener("click", (e) => {
+			e.target === this._sheetBackdrop && this._setSheetOpen(!1, !0);
+		}), this._sheetDialog = document.createElement("div"), this._sheetDialog.className = "yh-sheet", this._sheetDialog.setAttribute("role", "dialog"), this._sheetDialog.setAttribute("aria-modal", "true"), this._sheetDialog.setAttribute("aria-label", "Menu"), this._sheetDialog.addEventListener("keydown", (e) => {
+			this._handleSheetKeyDown(e);
+		});
+		let u = document.createElement("div");
+		u.className = "yh-sheet-header";
+		let d = document.createElement("span");
+		d.className = "yh-sheet-title", d.textContent = "Menu", this._sheetCloseBtn = document.createElement("button"), this._sheetCloseBtn.type = "button", this._sheetCloseBtn.className = "yh-btn yh-btn-icon", this._sheetCloseBtn.setAttribute("aria-label", "Đóng menu"), this._sheetCloseBtn.appendChild(o("M18 6L6 18M6 6l12 12")), this._sheetCloseBtn.addEventListener("click", () => {
+			this._setSheetOpen(!1, !0);
+		}), u.append(d, this._sheetCloseBtn), this._sheetNav = document.createElement("div"), this._sheetNav.className = "yh-sheet-nav", this._sheetAccount = document.createElement("div"), this._sheetAccount.className = "yh-sheet-account", this._sheetDialog.append(u, this._sheetNav, this._sheetAccount), this._sheetBackdrop.appendChild(this._sheetDialog), this._liveRegion = document.createElement("div"), this._liveRegion.className = "yh-sr-only", this._liveRegion.setAttribute("aria-live", "polite"), this._liveRegion.setAttribute("aria-atomic", "true"), this._shadow.append(e, t, this._expiredNotice, this._sheetBackdrop, this._liveRegion);
+	}
+	_syncAttributes() {
+		this._skipLink.href = this.skipTarget;
+	}
+	_announce(e) {
+		!this._liveRegion || this._lastAnnouncedAuthKey === e || (this._lastAnnouncedAuthKey = e, this._liveRegion.textContent = e);
+	}
+	_dispatchAuthChange() {
+		this.dispatchEvent(new CustomEvent("yh-auth-change", {
+			detail: {
+				state: this._state,
+				user: this._user
+			},
+			bubbles: !0,
+			composed: !0
+		}));
+	}
+	_handleAuthClick(e) {
+		let t = new CustomEvent(e === "signin" ? "yh-signin-click" : "yh-signup-click", {
+			bubbles: !0,
+			composed: !0,
+			cancelable: !0
+		}), n = this.dispatchEvent(t);
+		if (this._sheetOpen && this._setSheetOpen(!1, !1), n) {
+			let t = encodeURIComponent(window.location.href);
+			window.location.assign(`${this.authBase}/?auth=${e}&next=${t}`);
+		}
+	}
+	async _handleLogout() {
+		if (!this._loggingOut) {
+			this._loggingOut = !0, this._renderAccountRegions();
+			try {
+				let e = a();
+				await fetch(`${this.authBase}/api/auth/logout`, {
+					method: "POST",
+					credentials: "include",
+					headers: { "x-csrf-token": e }
+				});
+			} catch {} finally {
+				this._loggingOut = !1, this._menuOpen = !1, this._lastStableState = "signed-out", this._sheetOpen && this._setSheetOpen(!1, !1), this._announce("Đã đăng xuất"), await this.refresh(), this.dispatchEvent(new CustomEvent("yh-logout", {
+					bubbles: !0,
+					composed: !0
+				}));
+			}
+		}
+	}
+	_setMenuOpen(e, t) {
+		this._menuOpen !== e && (this._menuOpen = e, this._accountButtonEl && this._accountButtonEl.setAttribute("aria-expanded", String(e)), this._menuEl && (this._menuEl.hidden = !e), !e && t && this._accountButtonEl?.focus());
+	}
+	_focusMenuItem(e) {
+		if (!this._menuEl) return;
+		let t = Array.from(this._menuEl.querySelectorAll("[role=\"menuitem\"]"));
+		t.length !== 0 && t[(e % t.length + t.length) % t.length]?.focus();
+	}
+	_handleMenuKeyDown(e) {
+		if (!this._menuEl) return;
+		let t = Array.from(this._menuEl.querySelectorAll("[role=\"menuitem\"]"));
+		if (t.length === 0) return;
+		let n = this._shadow.activeElement, r = n ? t.indexOf(n) : -1;
+		switch (e.key) {
+			case "ArrowDown":
+				e.preventDefault(), this._focusMenuItem(r < 0 ? 0 : r + 1);
+				break;
+			case "ArrowUp":
+				e.preventDefault(), this._focusMenuItem(r < 0 ? t.length - 1 : r - 1);
+				break;
+			case "Home":
+				e.preventDefault(), this._focusMenuItem(0);
+				break;
+			case "End":
+				e.preventDefault(), this._focusMenuItem(t.length - 1);
+				break;
+			case "Escape":
+				e.preventDefault(), this._setMenuOpen(!1, !0);
+				break;
+			case "Tab": this._setMenuOpen(!1, !1);
+		}
+	}
+	_setSheetOpen(e, t) {
+		this._sheetOpen !== e && (this._sheetOpen = e, this._sheetBackdrop.hidden = !e, this._mobileToggleBtn.setAttribute("aria-expanded", String(e)), this._mobileToggleBtn.setAttribute("aria-label", e ? "Đóng menu" : "Mở menu"), e ? (this._syncMobileNavClone(), this._sheetCloseBtn.focus()) : t && this._mobileToggleBtn.focus(), this.dispatchEvent(new CustomEvent("yh-menu-toggle", {
+			detail: { open: e },
+			bubbles: !0,
+			composed: !0
+		})));
+	}
+	_syncMobileNavClone() {
+		this._sheetNav.replaceChildren();
+		let e = this._navSlot.assignedElements({ flatten: !0 });
+		for (let t of e) {
+			let e = t.cloneNode(!0);
+			e instanceof HTMLElement && (e.removeAttribute("slot"), e.addEventListener("click", (e) => {
+				e.target?.closest("a") && this._setSheetOpen(!1, !1);
+			})), this._sheetNav.appendChild(e);
+		}
+	}
+	_handleSheetKeyDown(e) {
+		if (e.key !== "Tab") return;
+		let t = Array.from(this._sheetDialog.querySelectorAll("a[href], button:not([disabled]), [tabindex]:not([tabindex=\"-1\"])")).filter((e) => !e.hasAttribute("hidden"));
+		if (t.length === 0) return;
+		let n = t[0], r = t[t.length - 1], i = this._shadow.activeElement;
+		e.shiftKey && i === n ? (e.preventDefault(), r?.focus()) : !e.shiftKey && i === r && (e.preventDefault(), n?.focus());
+	}
+	_renderAccountRegions() {
+		if (this._rendered) {
+			if (this._expiredNotice.hidden = this.hideAccount || this._state !== "expired", this.hideAccount) {
+				this._accountDesktop.hidden = !0, this._accountDesktop.replaceChildren(), this._sheetAccount.hidden = !0, this._sheetAccount.replaceChildren(), this._accountButtonEl = null, this._menuEl = null;
+				return;
+			}
+			this._accountDesktop.hidden = !1, this._sheetAccount.hidden = !1, this._renderDesktopAccount(), this._renderSheetAccount();
+		}
+	}
+	_renderDesktopAccount() {
+		if (this._accountDesktop.replaceChildren(), this._accountButtonEl = null, this._menuEl = null, this._state === "loading") {
+			let e = document.createElement("div");
+			e.className = "yh-skeleton", e.setAttribute("aria-busy", "true"), e.setAttribute("aria-label", "Đang tải tài khoản");
+			let t = document.createElement("span");
+			t.className = "yh-skeleton-circle";
+			let n = document.createElement("span");
+			n.className = "yh-skeleton-bar", e.append(t, n), this._accountDesktop.appendChild(e);
+			return;
+		}
+		if (this._state === "error") {
+			let e = document.createElement("div");
+			e.className = "yh-error-inline";
+			let t = document.createElement("span");
+			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
+			let n = document.createElement("button");
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.title = "Thử lại", n.appendChild(o("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+				this.refresh();
+			}), e.append(t, n), this._accountDesktop.appendChild(e);
+			return;
+		}
+		if (this._state === "signed-in" && this._user) {
+			let e = this._user, t = document.createElement("button");
+			t.type = "button", t.className = "yh-account-btn", t.setAttribute("part", "account-button"), t.setAttribute("aria-haspopup", "menu"), t.setAttribute("aria-expanded", String(this._menuOpen)), t.setAttribute("aria-label", `Tài khoản: ${e.displayName}`);
+			let n = document.createElement("span");
+			n.className = "yh-account-name", n.textContent = e.displayName;
+			let r = o("M6 9l6 6 6-6", "yh-chevron");
+			t.append(s(e), n, r), t.addEventListener("click", () => {
+				this._setMenuOpen(!this._menuOpen, !1);
+			}), t.addEventListener("keydown", (e) => {
+				e.key === "Enter" || e.key === " " || e.key === "ArrowDown" ? (e.preventDefault(), this._setMenuOpen(!0, !1), this._focusMenuItem(0)) : e.key === "Escape" && this._menuOpen && (e.preventDefault(), this._setMenuOpen(!1, !1));
+			});
+			let i = document.createElement("div");
+			i.className = "yh-menu", i.setAttribute("part", "menu"), i.setAttribute("role", "menu"), i.hidden = !this._menuOpen, i.addEventListener("keydown", (e) => {
+				this._handleMenuKeyDown(e);
+			});
+			let a = document.createElement("div");
+			a.className = "yh-menu-header";
+			let c = document.createElement("div");
+			c.className = "yh-menu-identity";
+			let l = document.createElement("span");
+			l.className = "yh-menu-name", l.textContent = e.displayName;
+			let u = document.createElement("span");
+			u.className = "yh-menu-email", u.textContent = e.email ?? "", c.append(l, u), a.append(s(e), c);
+			let d = document.createElement("a");
+			d.className = "yh-menu-item", d.setAttribute("role", "menuitem"), d.href = this.profileUrl, d.textContent = "Hồ sơ";
+			let f = document.createElement("a");
+			f.className = "yh-menu-item", f.setAttribute("role", "menuitem"), f.href = this.authBase, f.textContent = "Về YunDev.space";
+			let p = document.createElement("hr");
+			p.className = "yh-menu-divider", p.setAttribute("role", "separator");
+			let m = document.createElement("button");
+			m.type = "button", m.className = "yh-menu-item", m.setAttribute("role", "menuitem"), m.disabled = this._loggingOut, m.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", m.addEventListener("click", () => {
+				this._handleLogout();
+			}), i.append(a, d, f, p, m), this._accountButtonEl = t, this._menuEl = i, this._accountDesktop.append(t, i);
+			return;
+		}
+		let e = document.createElement("button");
+		e.type = "button", e.className = "yh-btn yh-btn-text", e.textContent = "Đăng nhập", e.addEventListener("click", () => {
+			this._handleAuthClick("signin");
+		});
+		let t = document.createElement("button");
+		t.type = "button", t.className = "yh-btn yh-btn-primary", t.textContent = "Đăng ký", t.addEventListener("click", () => {
+			this._handleAuthClick("signup");
+		}), this._accountDesktop.append(e, t);
+	}
+	_renderSheetAccount() {
+		if (this._sheetAccount.replaceChildren(), this._state === "loading") {
+			let e = document.createElement("div");
+			e.className = "yh-skeleton", e.setAttribute("aria-busy", "true");
+			let t = document.createElement("span");
+			t.className = "yh-skeleton-circle";
+			let n = document.createElement("span");
+			n.className = "yh-skeleton-bar", e.append(t, n), this._sheetAccount.appendChild(e);
+			return;
+		}
+		if (this._state === "error") {
+			let e = document.createElement("div");
+			e.className = "yh-error-inline";
+			let t = document.createElement("span");
+			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
+			let n = document.createElement("button");
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.appendChild(o("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+				this.refresh();
+			}), e.append(t, n), this._sheetAccount.appendChild(e);
+			return;
+		}
+		if (this._state === "signed-in" && this._user) {
+			let e = this._user, t = document.createElement("div");
+			t.className = "yh-menu-header";
+			let n = document.createElement("div");
+			n.className = "yh-menu-identity";
+			let r = document.createElement("span");
+			r.className = "yh-menu-name", r.textContent = e.displayName;
+			let i = document.createElement("span");
+			i.className = "yh-menu-email", i.textContent = e.email ?? "", n.append(r, i), t.append(s(e), n);
+			let a = document.createElement("div");
+			a.className = "yh-sheet-account-actions";
+			let o = document.createElement("a");
+			o.className = "yh-menu-item", o.href = this.profileUrl, o.textContent = "Hồ sơ";
+			let c = document.createElement("a");
+			c.className = "yh-menu-item", c.href = this.authBase, c.textContent = "Về YunDev.space";
+			let l = document.createElement("button");
+			l.type = "button", l.className = "yh-menu-item", l.disabled = this._loggingOut, l.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", l.addEventListener("click", () => {
+				this._handleLogout();
+			}), a.append(o, c, l), this._sheetAccount.append(t, a);
+			return;
+		}
+		let e = document.createElement("div");
+		e.className = "yh-sheet-account-actions";
+		let t = document.createElement("button");
+		t.type = "button", t.className = "yh-btn yh-btn-text", t.textContent = "Đăng nhập", t.addEventListener("click", () => {
+			this._handleAuthClick("signin");
+		});
+		let n = document.createElement("button");
+		n.type = "button", n.className = "yh-btn yh-btn-primary", n.textContent = "Đăng ký", n.addEventListener("click", () => {
+			this._handleAuthClick("signup");
+		}), e.append(t, n), this._sheetAccount.appendChild(e);
+	}
+};
+//#endregion
+//#region src/yun-header/index.ts
+function l(e = "yun-header") {
+	typeof customElements < "u" && !customElements.get(e) && customElements.define(e, c);
+}
+l();
+//#endregion
+export { c as YunHeader, l as defineYunHeader };
