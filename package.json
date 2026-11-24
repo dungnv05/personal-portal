@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:ci": "vitest run --reporter=default --coverage=false"
+    "test:ci": "vitest run --reporter=default --coverage=false",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
