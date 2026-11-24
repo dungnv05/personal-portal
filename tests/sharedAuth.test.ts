@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AuthChangeEvent, Session, SupabaseClient, User } from '@supabase/supabase-js'
+import type { Session, SupabaseClient, User } from '@supabase/supabase-js'
 
-const STORAGE_KEY = 'yundev_supabase_auth_token'
-const SESSION_COOKIE_KEY = 'yundev_session'
-
-type AuthListener = (event: AuthChangeEvent, session: Session | null) => void
+const LEGACY_SESSION_KEY = 'yundev_session'
+const LEGACY_TOKEN_KEY = 'yundev_supabase_auth_token'
 
 type RecordedClientCall = {
   url: string
@@ -15,11 +13,7 @@ type RecordedClientCall = {
       autoRefreshToken?: boolean
       detectSessionInUrl?: boolean
       storageKey?: string
-      storage?: {
-        getItem: (key: string) => string | null
-        setItem: (key: string, value: string) => void
-        removeItem: (key: string) => void
-      }
+      storage?: unknown
     }
   }
 }
@@ -32,9 +26,8 @@ type JsdomHandle = {
 }
 
 const mockState = vi.hoisted(() => {
-  const listeners = new Set<AuthListener>()
   const clientCalls: RecordedClientCall[] = []
-  let activeSession: Session | null = null
+  let nextSignInError: Error | null = null
 
   const createMockUser = (email: string): User => ({
     id: 'user-123',
@@ -53,78 +46,64 @@ const mockState = vi.hoisted(() => {
     user: createMockUser(email),
   })
 
-  const notifyListeners = (event: AuthChangeEvent, session: Session | null): void => {
-    for (const listener of listeners) {
-      listener(event, session)
+  const signUp = vi.fn(async ({ email }: { email: string; password: string }) => {
+    const user = createMockUser(email)
+    return { data: { user, session: null }, error: null }
+  })
+
+  const signInWithPassword = vi.fn(async ({ email }: { email: string; password: string }) => {
+    if (nextSignInError) {
+      const error = nextSignInError
+      nextSignInError = null
+      return { data: { user: null, session: null }, error }
     }
-  }
+    const session = createMockSession(email, `access-token-${email}`, `refresh-token-${email}`)
+    return { data: { user: session.user, session }, error: null }
+  })
+
+  const signOut = vi.fn(async () => ({ error: null }))
+  const getSession = vi.fn(async () => ({ data: { session: null }, error: null }))
+  const setSession = vi.fn(async () => ({ data: { user: null, session: null }, error: null }))
 
   const createClientMock = vi.fn(
     (url: string, anonKey: string, options?: RecordedClientCall['options']) => {
       clientCalls.push({ url, anonKey, options: options ?? {} })
-
-      const auth = {
-        signUp: vi.fn(async ({ email }: { email: string; password: string }) => {
-          const user = createMockUser(email)
-          return { data: { user, session: null }, error: null }
-        }),
-        signInWithPassword: vi.fn(async ({ email }: { email: string; password: string }) => {
-          const session = createMockSession(email, `access-${email}`, `refresh-${email}`)
-          activeSession = session
-          notifyListeners('SIGNED_IN', session)
-          return { data: { user: session.user, session }, error: null }
-        }),
-        signOut: vi.fn(async () => {
-          activeSession = null
-          notifyListeners('SIGNED_OUT', null)
-          return { error: null }
-        }),
-        getSession: vi.fn(async () => ({
-          data: { session: activeSession },
-          error: null,
-        })),
-        setSession: vi.fn(
-          async ({
-            access_token,
-            refresh_token,
-          }: {
-            access_token: string
-            refresh_token: string
-          }) => {
-            const session = createMockSession('synced@yundev.space', access_token, refresh_token)
-            activeSession = session
-            notifyListeners('SIGNED_IN', session)
-            return { data: { user: session.user, session }, error: null }
-          },
-        ),
-        onAuthStateChange: vi.fn((callback: AuthListener) => {
-          listeners.add(callback)
-          return {
-            data: {
-              subscription: {
-                unsubscribe: vi.fn(() => {
-                  listeners.delete(callback)
-                }),
-              },
-            },
-          }
-        }),
-      }
-
-      return { auth } as unknown as SupabaseClient
+      return {
+        auth: {
+          signUp,
+          signInWithPassword,
+          signOut,
+          getSession,
+          setSession,
+        },
+      } as unknown as SupabaseClient
     },
   )
 
+  const setNextSignInError = (error: Error | null): void => {
+    nextSignInError = error
+  }
+
   const reset = (): void => {
-    listeners.clear()
     clientCalls.length = 0
-    activeSession = null
+    nextSignInError = null
     createClientMock.mockClear()
+    signUp.mockClear()
+    signInWithPassword.mockClear()
+    signOut.mockClear()
+    getSession.mockClear()
+    setSession.mockClear()
   }
 
   return {
     createClientMock,
     clientCalls,
+    signUp,
+    signInWithPassword,
+    signOut,
+    getSession,
+    setSession,
+    setNextSignInError,
     reset,
   }
 })
@@ -150,145 +129,310 @@ function clearBrowserStorage(): void {
   localStorage.clear()
 }
 
+function getStorageSpyTarget(): Storage {
+  const proto = Object.getPrototypeOf(window.localStorage) as Storage | null
+  if (proto && proto !== Object.prototype && typeof proto.setItem === 'function') {
+    return proto
+  }
+  return window.localStorage
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function getRequestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input
+  }
+  if (input instanceof URL) {
+    return input.toString()
+  }
+  return input.url
+}
+
 async function loadSharedAuth() {
   vi.resetModules()
   return import('../src/utils/sharedAuth')
 }
 
-describe('sharedAuth', () => {
+describe('sharedAuth (HttpOnly cookie flow)', () => {
   beforeEach(() => {
     setTestUrl('https://portal.yundev.space/')
     clearBrowserStorage()
     mockState.reset()
     vi.stubGlobal(
       'fetch',
-      vi.fn(() =>
-        Promise.resolve(
-          new Response('{}', {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        ),
-      ),
+      vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({}, 200)),
     )
   })
 
   afterEach(() => {
     clearBrowserStorage()
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
     mockState.reset()
   })
 
-  it('saves and reads back a token round-trip with the configured storage key', async () => {
-    const auth = await loadSharedAuth()
+  it('configures the Supabase client without localStorage session persistence', async () => {
+    await loadSharedAuth()
     const clientCall = mockState.clientCalls[0]
 
-    expect(clientCall?.options.auth?.storageKey).toBe(STORAGE_KEY)
-    expect(clientCall?.options.auth?.storage).toBe(auth.cookieStorage)
+    expect(clientCall).toBeDefined()
+    expect(clientCall?.options.auth?.persistSession).toBe(false)
+    expect(clientCall?.options.auth?.autoRefreshToken).toBe(false)
+    expect(clientCall?.options.auth?.detectSessionInUrl).toBe(false)
+    expect(clientCall?.options.auth?.storage).toBeUndefined()
+    expect(clientCall?.options.auth?.storageKey).toBeUndefined()
+  })
 
-    const tokenValue = JSON.stringify({
-      access_token: 'roundtrip-access-token',
-      refresh_token: 'roundtrip-refresh-token',
+  it('POSTs access_token and refresh_token to /api/auth/session with credentials include on sign-in and writes no tokens to localStorage', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/session') {
+        return jsonResponse(
+          {
+            ok: true,
+            user: { id: 'user-123', email: 'yun@yundev.space' },
+          },
+          200,
+        )
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const setItemSpy = vi.spyOn(getStorageSpyTarget(), 'setItem')
+    const auth = await loadSharedAuth()
+    fetchMock.mockClear()
+
+    const result = await auth.signInWithEmail('yun@yundev.space', 'secret-password')
+
+    expect(result.error).toBeNull()
+    expect(result.data.user).toEqual({ id: 'user-123', email: 'yun@yundev.space' })
+    expect(mockState.signInWithPassword).toHaveBeenCalledWith({
+      email: 'yun@yundev.space',
+      password: 'secret-password',
     })
 
-    auth.cookieStorage.setItem(STORAGE_KEY, tokenValue)
+    const sessionCall = fetchMock.mock.calls.find(
+      (call) => getRequestUrl(call[0]) === '/api/auth/session',
+    )
+    expect(sessionCall).toBeDefined()
 
-    expect(auth.cookieStorage.getItem(STORAGE_KEY)).toBe(tokenValue)
-    expect(auth.getSharedCookie(STORAGE_KEY)).toBe(tokenValue)
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(tokenValue)
-  })
-
-  it('persists auth token and session keys on email sign-in', async () => {
-    const auth = await loadSharedAuth()
-    const response = await auth.signInWithEmail('yun@yundev.space', 'test-password')
-
-    expect(response.data.session).not.toBeNull()
-    const expectedSessionJson = JSON.stringify(response.data.session)
-    const expectedAccessToken = response.data.session?.access_token ?? ''
-
-    expect(auth.cookieStorage.getItem(STORAGE_KEY)).toBe(expectedSessionJson)
-    expect(auth.cookieStorage.getItem(SESSION_COOKIE_KEY)).toBe(expectedAccessToken)
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(expectedSessionJson)
-    expect(localStorage.getItem(SESSION_COOKIE_KEY)).toBe(expectedAccessToken)
-  })
-
-  it('removes the auth token and related session keys on sign-out', async () => {
-    const auth = await loadSharedAuth()
-    await auth.signInWithEmail('yun@yundev.space', 'test-password')
-
-    expect(auth.cookieStorage.getItem(STORAGE_KEY)).not.toBeNull()
-    expect(auth.cookieStorage.getItem(SESSION_COOKIE_KEY)).not.toBeNull()
-
-    await auth.signOutUser()
-
-    expect(auth.cookieStorage.getItem(STORAGE_KEY)).toBeNull()
-    expect(auth.cookieStorage.getItem(SESSION_COOKIE_KEY)).toBeNull()
-    expect(auth.getSharedCookie(STORAGE_KEY)).toBe('')
-    expect(auth.getSharedCookie(SESSION_COOKIE_KEY)).toBe('')
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
-    expect(localStorage.getItem(SESSION_COOKIE_KEY)).toBeNull()
-  })
-
-  it('fires auth subscription callbacks on save and clear, then unsubscribes cleanly', async () => {
-    const auth = await loadSharedAuth()
-    const receivedEvents: Array<{ event: AuthChangeEvent; hasSession: boolean }> = []
-
-    const {
-      data: { subscription },
-    } = auth.supabase.auth.onAuthStateChange((event, session) => {
-      receivedEvents.push({ event, hasSession: session !== null })
+    const requestInit = sessionCall?.[1]
+    expect(requestInit?.method).toBe('POST')
+    expect(requestInit?.credentials).toBe('include')
+    expect(new Headers(requestInit?.headers).get('content-type')).toBe('application/json')
+    expect(JSON.parse(String(requestInit?.body ?? '{}'))).toEqual({
+      access_token: 'access-token-yun@yundev.space',
+      refresh_token: 'refresh-token-yun@yundev.space',
     })
 
-    await auth.signInWithEmail('yun@yundev.space', 'test-password')
-    await auth.signOutUser()
-
-    expect(receivedEvents).toEqual([
-      { event: 'SIGNED_IN', hasSession: true },
-      { event: 'SIGNED_OUT', hasSession: false },
-    ])
-
-    subscription.unsubscribe()
-
-    await auth.signInWithEmail('yun@yundev.space', 'test-password')
-    await auth.signOutUser()
-
-    expect(receivedEvents).toHaveLength(2)
+    expect(mockState.setSession).not.toHaveBeenCalled()
+    expect(setItemSpy).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    expect(localStorage.getItem(LEGACY_SESSION_KEY)).toBeNull()
+    expect(localStorage.getItem(LEGACY_TOKEN_KEY)).toBeNull()
   })
 
-  it('returns null or empty without throwing when no token is present', async () => {
+  it('signs out locally and surfaces an error when /api/auth/session returns a non-200 status', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/session') {
+        return jsonResponse({ ok: false, error: 'invalid_token' }, 401)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const setItemSpy = vi.spyOn(getStorageSpyTarget(), 'setItem')
+    const auth = await loadSharedAuth()
+    fetchMock.mockClear()
+
+    const result = await auth.signInWithEmail('yun@yundev.space', 'secret-password')
+
+    expect(result.data.user).toBeNull()
+    expect(result.error).toBeInstanceOf(Error)
+    expect(result.error?.message).toContain('401')
+    expect(result.error?.message).toContain('invalid_token')
+    expect(mockState.signOut).toHaveBeenCalledTimes(1)
+    expect(setItemSpy).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+  })
+
+  it('returns an error without calling /api/auth/session when Supabase sign-in fails', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({}, 200),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    mockState.setNextSignInError(new Error('Invalid login credentials'))
+    const auth = await loadSharedAuth()
+    fetchMock.mockClear()
+
+    const result = await auth.signInWithEmail('yun@yundev.space', 'wrong-password')
+
+    expect(result.data.user).toBeNull()
+    expect(result.error).toBeInstanceOf(Error)
+    expect(result.error?.message).toBe('Invalid login credentials')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+  })
+
+  it('getSessionUser returns user on 200 from /api/auth/me without reading localStorage', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/me') {
+        return jsonResponse(
+          {
+            ok: true,
+            user: { id: 'user-99', email: 'cookie@yundev.space' },
+          },
+          200,
+        )
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const getItemSpy = vi.spyOn(getStorageSpyTarget(), 'getItem')
+    const auth = await loadSharedAuth()
+    fetchMock.mockClear()
+
+    const user = await auth.getSessionUser()
+
+    expect(user).toEqual({ id: 'user-99', email: 'cookie@yundev.space' })
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', {
+      method: 'GET',
+      credentials: 'include',
+    })
+    expect(getItemSpy).not.toHaveBeenCalled()
+    expect(mockState.getSession).not.toHaveBeenCalled()
+  })
+
+  it('getSessionUser returns null on 401 even if legacy tokens exist in localStorage', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/me') {
+        return jsonResponse({ ok: false }, 401)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    localStorage.setItem(LEGACY_SESSION_KEY, 'stale-access-token')
+    localStorage.setItem(
+      LEGACY_TOKEN_KEY,
+      JSON.stringify({ access_token: 'stale-access-token', refresh_token: 'stale-refresh-token' }),
+    )
+
+    const getItemSpy = vi.spyOn(getStorageSpyTarget(), 'getItem')
+    const auth = await loadSharedAuth()
+    fetchMock.mockClear()
+
+    const user = await auth.getSessionUser()
+
+    expect(user).toBeNull()
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', {
+      method: 'GET',
+      credentials: 'include',
+    })
+    expect(getItemSpy).not.toHaveBeenCalled()
+  })
+
+  it('logout sends x-csrf-token matching the csrf cookie, calls supabase signOut, and clears legacy localStorage keys', async () => {
+    const callOrder: string[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/logout') {
+        callOrder.push('fetch:/api/auth/logout')
+        return jsonResponse({ ok: true }, 200)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    mockState.signOut.mockImplementationOnce(async () => {
+      callOrder.push('supabase.auth.signOut')
+      return { error: null }
+    })
+
+    const csrfValue = '0123456789abcdef0123456789abcdef'
+    document.cookie = 'theme=dark; path=/'
+    document.cookie = `csrf=${csrfValue}; path=/`
+
+    localStorage.setItem(LEGACY_SESSION_KEY, 'legacy-access-token')
+    localStorage.setItem(
+      LEGACY_TOKEN_KEY,
+      JSON.stringify({ access_token: 'legacy-access-token', refresh_token: 'legacy-refresh-token' }),
+    )
+    localStorage.setItem('unrelated_ui_pref', 'compact')
+
+    const auth = await loadSharedAuth()
+    fetchMock.mockClear()
+
+    const result = await auth.logout()
+
+    expect(result.error).toBeNull()
+
+    const logoutCall = fetchMock.mock.calls.find(
+      (call) => getRequestUrl(call[0]) === '/api/auth/logout',
+    )
+    expect(logoutCall).toBeDefined()
+
+    const requestInit = logoutCall?.[1]
+    expect(requestInit?.method).toBe('POST')
+    expect(requestInit?.credentials).toBe('include')
+    expect(new Headers(requestInit?.headers).get('x-csrf-token')).toBe(csrfValue)
+
+    expect(mockState.signOut).toHaveBeenCalledTimes(1)
+    expect(callOrder).toEqual(['fetch:/api/auth/logout', 'supabase.auth.signOut'])
+
+    expect(localStorage.getItem(LEGACY_SESSION_KEY)).toBeNull()
+    expect(localStorage.getItem(LEGACY_TOKEN_KEY)).toBeNull()
+    expect(localStorage.getItem('unrelated_ui_pref')).toBe('compact')
+  })
+
+  it('never writes any access or refresh token to localStorage across sign-in, session check, and logout', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/session') {
+        document.cookie = 'csrf=lifecycle-csrf-token; path=/'
+        return jsonResponse(
+          { ok: true, user: { id: 'user-123', email: 'yun@yundev.space' } },
+          200,
+        )
+      }
+      if (url === '/api/auth/me') {
+        return jsonResponse(
+          { ok: true, user: { id: 'user-123', email: 'yun@yundev.space' } },
+          200,
+        )
+      }
+      if (url === '/api/auth/logout') {
+        return jsonResponse({ ok: true }, 200)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const setItemSpy = vi.spyOn(getStorageSpyTarget(), 'setItem')
     const auth = await loadSharedAuth()
 
-    expect(() => auth.cookieStorage.getItem(STORAGE_KEY)).not.toThrow()
-    expect(auth.cookieStorage.getItem(STORAGE_KEY)).toBeNull()
-    expect(auth.cookieStorage.getItem(SESSION_COOKIE_KEY)).toBeNull()
-    expect(auth.getSharedCookie(STORAGE_KEY)).toBe('')
-    await expect(auth.syncSharedSSOSession()).resolves.toBeNull()
-  })
+    const signInRes = await auth.signInWithEmail('yun@yundev.space', 'secret-password')
+    expect(signInRes.error).toBeNull()
 
-  it('uses the same storage key and shares the cookie across yundev.space subdomains', async () => {
-    setTestUrl('https://portal.yundev.space/')
-    const portalAuth = await loadSharedAuth()
-    const portalStorageKey = mockState.clientCalls[mockState.clientCalls.length - 1]?.options.auth?.storageKey
+    const sessionUser = await auth.getSessionUser()
+    expect(sessionUser).toEqual({ id: 'user-123', email: 'yun@yundev.space' })
 
-    const sharedPayload = JSON.stringify({
-      access_token: 'cross-subdomain-access-token',
-      refresh_token: 'cross-subdomain-refresh-token',
-    })
-    portalAuth.cookieStorage.setItem(STORAGE_KEY, sharedPayload)
+    const logoutRes = await auth.logout()
+    expect(logoutRes.error).toBeNull()
 
-    // Subdomains do not share localStorage; only the wildcard cookie carries the token.
-    localStorage.clear()
-
-    setTestUrl('https://brse.yundev.space/')
-    const brseAuth = await loadSharedAuth()
-    const brseStorageKey = mockState.clientCalls[mockState.clientCalls.length - 1]?.options.auth?.storageKey
-
-    expect(portalStorageKey).toBe(STORAGE_KEY)
-    expect(brseStorageKey).toBe(portalStorageKey)
-    expect(brseAuth.getSharedCookie(STORAGE_KEY)).toBe(sharedPayload)
-    expect(brseAuth.cookieStorage.getItem(STORAGE_KEY)).toBe(sharedPayload)
-
-    const syncedUser = await brseAuth.syncSharedSSOSession()
-    expect(syncedUser).not.toBeNull()
+    expect(setItemSpy).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
   })
 })

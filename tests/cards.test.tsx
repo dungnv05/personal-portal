@@ -140,14 +140,16 @@ describe('Portal app cards', () => {
   })
 
   it('renders app cards under the Supabase mock without attempting real network calls', () => {
-    const priorUrls = (fetchMock.mock.calls as unknown[][]).map((args) => {
+    const extractUrl = (args: unknown[]): string => {
       const input = args[0]
       if (typeof input === 'string') return input
       if (typeof input === 'object' && input !== null && 'url' in input) {
         return String((input as { url: unknown }).url)
       }
       return String(input ?? '')
-    })
+    }
+
+    const priorUrls = (fetchMock.mock.calls as unknown[][]).map(extractUrl)
     expect(
       priorUrls.some((url) => /^https?:\/\//i.test(url) || url.includes('supabase.co')),
     ).toBe(false)
@@ -160,7 +162,11 @@ describe('Portal app cards', () => {
     }).not.toThrow()
 
     expect(globalThis.fetch).toBe(fetchMock)
-    expect(fetchMock).not.toHaveBeenCalled()
+    const renderUrls = (fetchMock.mock.calls as unknown[][]).map(extractUrl)
+    expect(renderUrls.every((url) => url === '/api/auth/me')).toBe(true)
+    expect(
+      renderUrls.some((url) => /^https?:\/\//i.test(url) || url.includes('supabase.co')),
+    ).toBe(false)
 
     const rendered = outcome.rendered
     expect(rendered).toBeDefined()

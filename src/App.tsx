@@ -1,5 +1,4 @@
 import { useEffect, useState, type CSSProperties, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
-import type { User } from '@supabase/supabase-js'
 import {
   WalletCards,
   Terminal,
@@ -19,11 +18,11 @@ import {
   Activity,
 } from 'lucide-react'
 import {
-  supabase,
+  getSessionUser,
+  logout,
   signInWithEmail,
   signUpWithEmail,
-  signOutUser,
-  syncSharedSSOSession,
+  type SessionUser,
 } from './utils/sharedAuth'
 import './App.css'
 
@@ -50,7 +49,7 @@ type TechStackItem = {
 }
 
 function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
 
@@ -61,40 +60,31 @@ function App() {
   const [authMessage, setAuthMessage] = useState<AuthMessage | null>(null)
 
   useEffect(() => {
-    // Check active session & sync SSO on load
-    syncSharedSSOSession().then((user) => {
-      if (user) setCurrentUser(user)
-    })
+    let active = true
 
-    const handleSync = () => {
-      syncSharedSSOSession().then((user) => setCurrentUser(user))
+    const refreshSession = () => {
+      void getSessionUser().then((user) => {
+        if (active) {
+          setCurrentUser(user)
+        }
+      })
     }
 
-    window.addEventListener('focus', handleSync)
+    refreshSession()
+
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') handleSync()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('storage', (e: StorageEvent) => {
-      if (e.key === 'yundev_session' || e.key === 'yundev_supabase_auth_token') {
-        handleSync()
+      if (document.visibilityState === 'visible') {
+        refreshSession()
       }
-    })
+    }
 
-    const intervalId = setInterval(handleSync, 2500)
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setCurrentUser(session?.user || null)
-    })
+    window.addEventListener('focus', refreshSession)
+    document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
-      subscription.unsubscribe()
-      window.removeEventListener('focus', handleSync)
+      active = false
+      window.removeEventListener('focus', refreshSession)
       document.removeEventListener('visibilitychange', handleVisibility)
-      clearInterval(intervalId)
     }
   }, [])
 
@@ -123,7 +113,7 @@ function App() {
   }
 
   const handleLogout = async () => {
-    await signOutUser()
+    await logout()
     setCurrentUser(null)
   }
 
