@@ -24,11 +24,8 @@ import {
   signUpWithEmail,
   type SessionUser,
 } from './utils/sharedAuth'
-import {
-  getNextTargetLabel,
-  hasNextParam,
-  resolveNextTarget,
-} from './utils/nextParam'
+import { getNextTargetLabel } from './utils/nextParam'
+import { resolveNextUrl } from './utils/nextUrl'
 import { Turnstile } from './components/Turnstile'
 import { hasTurnstileSiteKey } from './utils/turnstile'
 import './App.css'
@@ -144,7 +141,12 @@ function App() {
           signUpCaptchaToken ?? undefined,
         )
         if (error) throw error
-        setAuthMessage({ type: 'success', text: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận (nếu có).' })
+        const nextTarget = resolveNextUrl(window.location.search)
+        if (nextTarget !== null) {
+          window.location.assign(nextTarget)
+        } else {
+          setAuthMessage({ type: 'success', text: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận (nếu có).' })
+        }
       } else {
         const { data, error } = await signInWithEmail(
           authEmail,
@@ -152,10 +154,12 @@ function App() {
           signInCaptchaToken ?? undefined,
         )
         if (error) throw error
-        setCurrentUser(data.user)
-        closeAuthModal()
-        if (hasNextParam(window.location.search)) {
-          window.location.assign(resolveNextTarget(window.location.search))
+        const nextTarget = resolveNextUrl(window.location.search)
+        if (nextTarget !== null) {
+          window.location.assign(nextTarget)
+        } else {
+          setCurrentUser(data.user)
+          closeAuthModal()
         }
       }
     } catch (err: unknown) {
