@@ -4,6 +4,7 @@ export default function handler(req, res) {
     'https://yundev.space',
     'https://www.yundev.space',
     'https://tinh-luong.yundev.space',
+    'https://brse.yundev.space',
     'http://localhost:5173', // Vite local
     'http://127.0.0.1:5173'
   ];

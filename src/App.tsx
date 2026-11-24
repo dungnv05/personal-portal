@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import type { User } from '@supabase/supabase-js'
 import {
   WalletCards,
   Terminal,
-  Mail,
   AppWindow,
   ChevronRight,
   Cpu,
@@ -16,19 +16,41 @@ import {
   Lock,
   UserPlus,
   Gamepad2,
-  Activity
+  Activity,
 } from 'lucide-react'
 import {
   supabase,
   signInWithEmail,
   signUpWithEmail,
   signOutUser,
-  syncSharedSSOSession
+  syncSharedSSOSession,
 } from './utils/sharedAuth'
 import './App.css'
 
+type AuthMessage = {
+  type: 'success' | 'error'
+  text: string
+}
+
+type AppStatus = 'Active' | 'In Dev' | 'Planned'
+
+type AppCard = {
+  name: string
+  desc: string
+  icon: ReactNode
+  url: string
+  status: AppStatus
+  color: string
+  tags: string[]
+}
+
+type TechStackItem = {
+  name: string
+  icon: string
+}
+
 function App() {
-  const [currentUser, setCurrentUser] = useState(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
 
@@ -36,16 +58,16 @@ function App() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
-  const [authMessage, setAuthMessage] = useState(null)
+  const [authMessage, setAuthMessage] = useState<AuthMessage | null>(null)
 
   useEffect(() => {
     // Check active session & sync SSO on load
-    syncSharedSSOSession().then(user => {
+    syncSharedSSOSession().then((user) => {
       if (user) setCurrentUser(user)
     })
 
     const handleSync = () => {
-      syncSharedSSOSession().then(user => setCurrentUser(user))
+      syncSharedSSOSession().then((user) => setCurrentUser(user))
     }
 
     window.addEventListener('focus', handleSync)
@@ -53,7 +75,7 @@ function App() {
       if (document.visibilityState === 'visible') handleSync()
     }
     document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('storage', (e) => {
+    window.addEventListener('storage', (e: StorageEvent) => {
       if (e.key === 'yundev_session' || e.key === 'yundev_supabase_auth_token') {
         handleSync()
       }
@@ -62,7 +84,9 @@ function App() {
     const intervalId = setInterval(handleSync, 2500)
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setCurrentUser(session?.user || null)
     })
 
@@ -74,14 +98,14 @@ function App() {
     }
   }, [])
 
-  const handleAuthSubmit = async (e) => {
+  const handleAuthSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setAuthLoading(true)
     setAuthMessage(null)
 
     try {
       if (isSignUp) {
-        const { data, error } = await signUpWithEmail(authEmail, authPassword)
+        const { error } = await signUpWithEmail(authEmail, authPassword)
         if (error) throw error
         setAuthMessage({ type: 'success', text: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận (nếu có).' })
       } else {
@@ -90,8 +114,9 @@ function App() {
         setCurrentUser(data.user)
         setShowAuthModal(false)
       }
-    } catch (err) {
-      setAuthMessage({ type: 'error', text: err.message || 'Thao tác thất bại. Vui lòng thử lại.' })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Thao tác thất bại. Vui lòng thử lại.'
+      setAuthMessage({ type: 'error', text: message })
     } finally {
       setAuthLoading(false)
     }
@@ -102,52 +127,69 @@ function App() {
     setCurrentUser(null)
   }
 
-  const apps = [
+  const handleEmailChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setAuthEmail(e.target.value)
+  }
+
+  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setAuthPassword(e.target.value)
+  }
+
+  const apps: AppCard[] = [
     {
-      name: "SalaryFlow",
-      desc: "Công cụ tính lương Gross sang Net và ngược lại, cập nhật đầy đủ và chuẩn xác các chính sách bảo hiểm & thuế thu nhập cá nhân mới nhất năm 2026.",
+      name: 'SalaryFlow',
+      desc: 'Công cụ tính lương Gross sang Net và ngược lại, cập nhật đầy đủ và chuẩn xác các chính sách bảo hiểm & thuế thu nhập cá nhân mới nhất năm 2026.',
       icon: <WalletCards />,
-      url: "https://tinh-luong.yundev.space",
-      status: "Active",
-      color: "#06b6d4",
-      tags: ["HTML5", "Vanilla CSS", "JavaScript", "Chart.js"]
+      url: 'https://tinh-luong.yundev.space',
+      status: 'Active',
+      color: '#06b6d4',
+      tags: ['HTML5', 'Vanilla CSS', 'JavaScript', 'Chart.js'],
     },
     {
-      name: "Vang Vọng Sử Việt",
-      desc: "Web Game 3D Idle Gacha thẻ bài đề tài lịch sử Việt Nam. Chiêu mộ danh nhân lịch sử, dàn trận 6v6, kích hoạt Hợp Kích, Thần Khí và Linh Vật thần thoại.",
+      name: 'Vang Vọng Sử Việt',
+      desc: 'Web Game 3D Idle Gacha thẻ bài đề tài lịch sử Việt Nam. Chiêu mộ danh nhân lịch sử, dàn trận 6v6, kích hoạt Hợp Kích, Thần Khí và Linh Vật thần thoại.',
       icon: <Gamepad2 />,
-      url: "https://vang-vong-su-viet.yundev.space",
-      status: "Active",
-      color: "#f59e0b",
-      tags: ["React", "Three.js", "R3F", "Zustand", "TypeScript"]
+      url: 'https://vang-vong-su-viet.yundev.space',
+      status: 'Active',
+      color: '#f59e0b',
+      tags: ['React', 'Three.js', 'R3F', 'Zustand', 'TypeScript'],
     },
     {
-      name: "SecretVault",
-      desc: "Hệ thống ghi chú bảo mật, mã hóa dữ liệu end-to-end (E2EE) trực tiếp tại trình duyệt sử dụng Web Crypto API.",
+      name: 'SecretVault',
+      desc: 'Hệ thống ghi chú bảo mật, mã hóa dữ liệu end-to-end (E2EE) trực tiếp tại trình duyệt sử dụng Web Crypto API.',
       icon: <ShieldAlert />,
-      url: "https://vault.yundev.space",
-      status: "In Dev",
-      color: "#ec4899",
-      tags: ["React", "Tailwind", "Web Crypto API"]
+      url: 'https://vault.yundev.space',
+      status: 'In Dev',
+      color: '#ec4899',
+      tags: ['React', 'Tailwind', 'Web Crypto API'],
     },
     {
-      name: "IVF Journey",
-      desc: "Nền tảng hỗ trợ và đồng hành cùng hành trình IVF. Theo dõi lịch trình, lưu trữ kết quả và kiến thức sinh sản.",
+      name: 'IVF Journey',
+      desc: 'Nền tảng hỗ trợ và đồng hành cùng hành trình IVF. Theo dõi lịch trình, lưu trữ kết quả và kiến thức sinh sản.',
       icon: <Activity />,
-      url: "https://ivf-journey.yundev.space",
-      status: "Active",
-      color: "#10b981",
-      tags: ["React", "Tailwind", "Supabase"]
-    }
+      url: 'https://ivf-journey.yundev.space',
+      status: 'Active',
+      color: '#10b981',
+      tags: ['React', 'Tailwind', 'Supabase'],
+    },
+    {
+      name: 'PM / BrSE Track',
+      desc: 'Lộ trình PM/BrSE thị trường Nhật bằng tiếng Việt: khóa học, glossary và career path.',
+      icon: <Kanban />,
+      url: 'https://brse.yundev.space',
+      status: 'Planned',
+      color: '#8b5cf6',
+      tags: ['Learning', 'PM/BrSE', 'Career Path', 'Glossary'],
+    },
   ]
 
-  const techStack = [
-    { name: "React 19", icon: "⚛️" },
-    { name: "Vite", icon: "⚡" },
-    { name: "JavaScript (ES6+)", icon: "💛" },
-    { name: "Vanilla CSS & Grid", icon: "🎨" },
-    { name: "Supabase Auth & DB", icon: "⚡" },
-    { name: "Git & GitHub", icon: "🐙" }
+  const techStack: TechStackItem[] = [
+    { name: 'React 19', icon: '⚛️' },
+    { name: 'Vite', icon: '⚡' },
+    { name: 'JavaScript (ES6+)', icon: '💛' },
+    { name: 'Vanilla CSS & Grid', icon: '🎨' },
+    { name: 'Supabase Auth & DB', icon: '⚡' },
+    { name: 'Git & GitHub', icon: '🐙' },
   ]
 
   return (
@@ -184,7 +226,10 @@ function App() {
                 type="button"
                 className="btn-launch"
                 style={{ marginTop: 0, padding: '0.45rem 0.9rem' }}
-                onClick={() => { setIsSignUp(false); setShowAuthModal(true); }}
+                onClick={() => {
+                  setIsSignUp(false)
+                  setShowAuthModal(true)
+                }}
               >
                 <LogIn size={15} /> Đăng nhập
               </button>
@@ -214,7 +259,7 @@ function App() {
         <section className="apps-section">
           <div className="section-header">
             <h2 className="section-title">
-              <AppWindow style={{ color: "var(--neon-purple)" }} /> Kho Ứng Dụng Subdomain
+              <AppWindow style={{ color: 'var(--neon-purple)' }} /> Kho Ứng Dụng Subdomain
             </h2>
             <p className="section-subtitle">Mỗi ứng dụng chạy độc lập tại từng Subdomain tương ứng</p>
           </div>
@@ -224,7 +269,7 @@ function App() {
               <div
                 key={index}
                 className="cyber-card app-card"
-                style={{ '--accent-color': app.color }}
+                style={{ '--accent-color': app.color } as CSSProperties}
               >
                 <div>
                   <div className="card-overlay"></div>
@@ -273,7 +318,7 @@ function App() {
         <section className="tech-section">
           <div className="section-header" style={{ marginBottom: '1.5rem' }}>
             <h2 className="section-title">
-              <Cpu style={{ color: "var(--neon-cyan)" }} /> Kiến Trúc & Công Nghệ
+              <Cpu style={{ color: 'var(--neon-cyan)' }} /> Kiến Trúc & Công Nghệ
             </h2>
           </div>
           <div className="tech-grid">
@@ -295,7 +340,7 @@ function App() {
       {/* Auth Modal */}
       {showAuthModal && (
         <div className="auth-modal-overlay" onClick={() => setShowAuthModal(false)}>
-          <div className="cyber-card auth-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="cyber-card auth-modal-card" onClick={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
             <div className="auth-modal-header">
               <h3>{isSignUp ? <UserPlus size={20} /> : <Lock size={20} />} {isSignUp ? 'Tạo Tài Khoản YunDev' : 'Đăng Nhập YunDev'}</h3>
               <button type="button" className="btn-close" onClick={() => setShowAuthModal(false)}>
@@ -317,7 +362,7 @@ function App() {
                   required
                   placeholder="name@yundev.space"
                   value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
+                  onChange={handleEmailChange}
                 />
               </div>
 
@@ -328,7 +373,7 @@ function App() {
                   required
                   placeholder="••••••••"
                   value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
+                  onChange={handlePasswordChange}
                 />
               </div>
 
