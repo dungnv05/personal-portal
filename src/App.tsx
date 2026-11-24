@@ -1,9 +1,8 @@
-import { useEffect, useState, type CSSProperties, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import {
   WalletCards,
   Terminal,
   AppWindow,
-  ChevronRight,
   Cpu,
   Kanban,
   ShieldAlert,
@@ -250,139 +249,148 @@ function App() {
 
   return (
     <>
-      {/* Background Gradients & Grid */}
-      <div className="cyber-grid"></div>
-      <div className="ambient-glows">
-        <div className="glow-purple"></div>
-        <div className="glow-cyan"></div>
-      </div>
-
       <div className="portal-wrapper">
         {/* Navigation / Header */}
         <header className="portal-header">
-          <div className="brand">
-            <div className="brand-icon">
-              <Terminal />
-            </div>
-            <span className="brand-name">YunDev.space</span>
-          </div>
-
-          <div className="social-links" style={{ alignItems: 'center', gap: '0.75rem' }}>
-            {currentUser ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span className="tag-badge" style={{ borderColor: 'var(--neon-green)', color: 'var(--neon-green)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <UserCheck size={14} /> {currentUser.email}
-                </span>
-                <button type="button" className="social-btn" onClick={handleLogout} title="Đăng xuất">
-                  <LogOut size={16} />
-                </button>
+          <div className="portal-header-inner">
+            <div className="brand">
+              <div className="brand-icon">
+                <Terminal />
               </div>
-            ) : (
-              <button
-                type="button"
-                className="btn-launch"
-                style={{ marginTop: 0, padding: '0.45rem 0.9rem' }}
-                onClick={openSignInModal}
-              >
-                <LogIn size={15} /> Đăng nhập
-              </button>
-            )}
+              <span className="brand-name">YunDev.space</span>
+            </div>
 
-            <a href="https://github.com/dungnv05" target="_blank" rel="noopener noreferrer" className="social-btn" aria-label="GitHub">
-              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-              </svg>
-            </a>
+            <div className="social-links">
+              {currentUser ? (
+                <div className="user-session">
+                  <span className="tag-badge user-badge" title={currentUser.email ?? undefined}>
+                    <UserCheck size={14} /> {currentUser.email}
+                  </span>
+                  <button
+                    type="button"
+                    className="social-btn"
+                    onClick={handleLogout}
+                    title="Đăng xuất"
+                    aria-label="Đăng xuất"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-launch"
+                  onClick={openSignInModal}
+                >
+                  <LogIn size={16} /> Đăng nhập
+                </button>
+              )}
+
+              <a
+                href="https://github.com/dungnv05"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="social-btn"
+                aria-label="GitHub"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                </svg>
+              </a>
+            </div>
           </div>
         </header>
 
-        {/* Hero Section */}
-        <section className="hero-section">
-          <span className="cyber-tag">Supabase Auth Integrated // yundev.space</span>
-          <h1 className="hero-title">
-            Chào mừng đến với <br />
-            <span className="gradient-text-purple">YunDev Ecosystem</span>
-          </h1>
-          <p className="hero-subtitle">
-            Cổng thông tin và thư viện ứng dụng cá nhân độc lập. Tự động đồng bộ tài khoản và phiên đăng nhập trên toàn bộ tên miền phụ <code>*.yundev.space</code>.
-          </p>
-        </section>
+        <main className="portal-main">
+          {/* Hero Section */}
+          <section className="hero-section">
+            <div className="hero-glow" aria-hidden="true"></div>
+            <span className="cyber-tag">An toàn · Đồng bộ · Cá nhân</span>
+            <h1 className="hero-title">
+              Chào mừng đến với <span className="gradient-text-purple">YunDev</span> Ecosystem
+            </h1>
+            <p className="hero-subtitle">
+              Cổng thông tin và thư viện ứng dụng cá nhân độc lập. Tự động đồng bộ tài khoản và phiên đăng nhập trên toàn bộ tên miền phụ <code>*.yundev.space</code>.
+            </p>
+          </section>
 
-        {/* Apps Grid */}
-        <section className="apps-section">
-          <div className="section-header">
-            <h2 className="section-title">
-              <AppWindow style={{ color: 'var(--neon-purple)' }} /> Kho Ứng Dụng Subdomain
-            </h2>
-            <p className="section-subtitle">Mỗi ứng dụng chạy độc lập tại từng Subdomain tương ứng</p>
-          </div>
+          {/* Apps Grid */}
+          <section className="apps-section">
+            <div className="section-header">
+              <h2 className="section-title">
+                <AppWindow className="section-title-icon" /> Kho Ứng Dụng Subdomain
+              </h2>
+              <p className="section-subtitle">Mỗi ứng dụng chạy độc lập tại từng Subdomain tương ứng</p>
+            </div>
 
-          <div className="apps-grid">
-            {apps.map((app, index) => (
-              <div
-                key={index}
-                className="cyber-card app-card"
-                style={{ '--accent-color': app.color } as CSSProperties}
-              >
-                <div>
-                  <div className="card-overlay"></div>
-
-                  {/* Status Tag */}
-                  <span className={`app-status ${app.status === 'Active' ? 'status-active' : 'status-dev'}`}>
-                    {app.status}
-                  </span>
-
-                  {/* App Icon */}
-                  <div className="app-icon">
-                    {app.icon}
-                  </div>
-
-                  {/* App Details */}
-                  <div className="app-meta">
-                    <h3 className="app-name">{app.name}</h3>
-                    <p className="app-desc">{app.desc}</p>
-                  </div>
-                </div>
-
-                {/* Footer of card */}
-                <div>
-                  <div className="app-tags">
-                    {app.tags.map((tag, tIdx) => (
-                      <span key={tIdx} className="tag-badge">{tag}</span>
-                    ))}
-                  </div>
-                  <a
-                    href={app.url}
-                    target={app.status === 'Active' ? '_blank' : '_self'}
-                    rel="noopener noreferrer"
-                    className="btn-launch"
-                    style={{ marginTop: '1.25rem' }}
+            <div className="apps-grid">
+              {apps.map((app, index) => {
+                const isActive = app.status === 'Active'
+                return (
+                  <div
+                    key={index}
+                    className={`cyber-card app-card${isActive ? '' : ' app-card-disabled'}`}
                   >
-                    {app.status === 'Active' ? `Truy cập ${app.url.replace('https://', '')}` : 'Đang phát triển'}
-                    {app.status === 'Active' ? <ExternalLink size={14} /> : <ChevronRight size={14} />}
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+                    <div>
+                      <div className="app-card-top">
+                        {/* App Icon */}
+                        <div className="app-icon">
+                          {app.icon}
+                        </div>
 
-        {/* Tech Stack Pills */}
-        <section className="tech-section">
-          <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-            <h2 className="section-title">
-              <Cpu style={{ color: 'var(--neon-cyan)' }} /> Kiến Trúc & Công Nghệ
-            </h2>
-          </div>
-          <div className="tech-grid">
-            {techStack.map((tech, index) => (
-              <div key={index} className="tech-pill">
-                <span>{tech.icon}</span>
-                <span>{tech.name}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+                        {/* Status Tag */}
+                        <span className={`app-status ${isActive ? 'status-active' : 'status-dev'}`}>
+                          {app.status}
+                        </span>
+                      </div>
+
+                      {/* App Details */}
+                      <div className="app-meta">
+                        <h3 className="app-name">{app.name}</h3>
+                        <p className="app-desc">{app.desc}</p>
+                      </div>
+                    </div>
+
+                    {/* Footer of card */}
+                    <div className="app-card-footer">
+                      <div className="app-tags">
+                        {app.tags.map((tag, tIdx) => (
+                          <span key={tIdx} className="tag-badge">{tag}</span>
+                        ))}
+                      </div>
+                      <a
+                        href={app.url}
+                        target={isActive ? '_blank' : '_self'}
+                        rel="noopener noreferrer"
+                        className="btn btn-secondary btn-launch"
+                      >
+                        <span>{isActive ? `Truy cập ${app.url.replace('https://', '')}` : 'Đang phát triển'}</span>
+                        {isActive && <ExternalLink size={15} />}
+                      </a>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Tech Stack Pills */}
+          <section className="tech-section">
+            <div className="section-header">
+              <h2 className="section-title">
+                <Cpu className="section-title-icon section-title-icon-mint" /> Kiến Trúc & Công Nghệ
+              </h2>
+            </div>
+            <div className="tech-grid">
+              {techStack.map((tech, index) => (
+                <div key={index} className="tech-pill">
+                  <span>{tech.icon}</span>
+                  <span>{tech.name}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </main>
 
         {/* Footer */}
         <footer className="portal-footer">
@@ -396,7 +404,7 @@ function App() {
           <div className="cyber-card auth-modal-card" onClick={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
             <div className="auth-modal-header">
               <h3>{isSignUp ? <UserPlus size={20} /> : <Lock size={20} />} {isSignUp ? 'Tạo Tài Khoản YunDev' : 'Đăng Nhập YunDev'}</h3>
-              <button type="button" className="btn-close" onClick={closeAuthModal}>
+              <button type="button" className="btn-close" onClick={closeAuthModal} aria-label="Đóng">
                 <X size={18} />
               </button>
             </div>
@@ -415,8 +423,9 @@ function App() {
 
             <form onSubmit={handleAuthSubmit} className="auth-form">
               <div className="auth-input-group">
-                <label>Địa chỉ Email</label>
+                <label htmlFor="auth-email">Địa chỉ Email</label>
                 <input
+                  id="auth-email"
                   type="email"
                   required
                   placeholder="name@yundev.space"
@@ -426,8 +435,9 @@ function App() {
               </div>
 
               <div className="auth-input-group">
-                <label>Mật khẩu</label>
+                <label htmlFor="auth-password">Mật khẩu</label>
                 <input
+                  id="auth-password"
                   type="password"
                   required
                   placeholder="••••••••"
@@ -436,21 +446,23 @@ function App() {
                 />
               </div>
 
-              {isSignUp ? (
-                <Turnstile
-                  key={`signup-${turnstileResetKey}`}
-                  theme="dark"
-                  onToken={setSignUpCaptchaToken}
-                />
-              ) : (
-                <Turnstile
-                  key={`signin-${turnstileResetKey}`}
-                  theme="dark"
-                  onToken={setSignInCaptchaToken}
-                />
-              )}
+              <div id="turnstile-slot" className="turnstile-slot">
+                {isSignUp ? (
+                  <Turnstile
+                    key={`signup-${turnstileResetKey}`}
+                    theme="dark"
+                    onToken={setSignUpCaptchaToken}
+                  />
+                ) : (
+                  <Turnstile
+                    key={`signin-${turnstileResetKey}`}
+                    theme="dark"
+                    onToken={setSignInCaptchaToken}
+                  />
+                )}
+              </div>
 
-              <button type="submit" className="btn-launch btn-auth-submit" disabled={isSubmitDisabled}>
+              <button type="submit" className="btn btn-primary btn-launch btn-auth-submit" disabled={isSubmitDisabled}>
                 {authLoading ? 'Đang xử lý...' : (isSignUp ? 'Đăng ký ngay' : 'Đăng nhập')}
               </button>
             </form>
