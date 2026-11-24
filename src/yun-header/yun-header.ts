@@ -479,10 +479,56 @@ function sanitizeAvatarUrl(raw: string | null): string | null {
   if (!raw) {
     return null
   }
-  if (raw.startsWith('/') || raw.startsWith('https://') || raw.startsWith('http://')) {
-    return raw
+  try {
+    const parsed = new URL(raw)
+    return parsed.protocol === 'https:' ? parsed.href : null
+  } catch {
+    return null
   }
-  return null
+}
+
+function isAllowedAuthOrigin(url: URL): boolean {
+  if (url.username || url.password) {
+    return false
+  }
+  const host = url.hostname.toLowerCase()
+  if (url.protocol === 'https:') {
+    return host === 'yundev.space' || host.endsWith('.yundev.space')
+  }
+  if (url.protocol === 'http:') {
+    return host === 'localhost' || host === '127.0.0.1'
+  }
+  return false
+}
+
+function sanitizeAuthBase(raw: string | null): string {
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return DEFAULT_AUTH_BASE
+  }
+  try {
+    const parsed = new URL(trimmed)
+    return isAllowedAuthOrigin(parsed) ? parsed.origin : DEFAULT_AUTH_BASE
+  } catch {
+    return DEFAULT_AUTH_BASE
+  }
+}
+
+function sanitizeProfileUrl(raw: string | null, authBase: string): string {
+  const fallback = `${authBase}/?view=profile`
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return fallback
+  }
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\')) {
+    return trimmed
+  }
+  try {
+    const parsed = new URL(trimmed)
+    return isAllowedAuthOrigin(parsed) ? parsed.href : fallback
+  } catch {
+    return fallback
+  }
 }
 
 function computeInitials(displayName: string): string {
@@ -601,6 +647,7 @@ export class YunHeader extends HTMLElement {
   private _state: YunHeaderState = 'loading'
   private _lastStableState: YunHeaderState = 'loading'
   private _user: YunHeaderUser | null = null
+  private _stale = false
   private _menuOpen = false
   private _sheetOpen = false
   private _loggingOut = false
@@ -669,14 +716,16 @@ export class YunHeader extends HTMLElement {
     return this._user
   }
 
+  get stale(): boolean {
+    return this._stale
+  }
+
   private get authBase(): string {
-    const raw = this.getAttribute('auth-base')?.trim() || DEFAULT_AUTH_BASE
-    return raw.endsWith('/') ? raw.slice(0, -1) : raw
+    return sanitizeAuthBase(this.getAttribute('auth-base'))
   }
 
   private get profileUrl(): string {
-    const raw = this.getAttribute('profile-url')?.trim()
-    return raw && raw.length > 0 ? raw : `${this.authBase}/?view=profile`
+    return sanitizeProfileUrl(this.getAttribute('profile-url'), this.authBase)
   }
 
   private get hideAccount(): boolean {
@@ -731,10 +780,11 @@ export class YunHeader extends HTMLElement {
     }
 
     let timedOut = false
-    this._loadingTimer = setTimeout(() => {
+    const timerId = setTimeout(() => {
       timedOut = true
       controller.abort('timeout')
     }, LOADING_TIMEOUT_MS)
+    this._loadingTimer = timerId
 
     try {
       const response = await fetch(`${this.authBase}/api/auth/me`, {
@@ -758,6 +808,7 @@ export class YunHeader extends HTMLElement {
         if (parsedUser) {
           const shouldAnnounce =
             this._lastStableState !== 'signed-in' || this._user?.id !== parsedUser.id
+          this._stale = false
           this._state = 'signed-in'
           this._lastStableState = 'signed-in'
           this._user = parsedUser
@@ -770,25 +821,34 @@ export class YunHeader extends HTMLElement {
       } else if (response.status === 401) {
         this._applySignedOutOrExpired(wasSignedIn)
       } else {
+        this._stale = false
         this._state = 'error'
         this._lastStableState = 'error'
         this._user = null
       }
     } catch {
       if (timedOut) {
-        this._state = 'signed-out'
-        this._lastStableState = 'signed-out'
-        this._user = null
+        if (wasSignedIn && this._user) {
+          this._stale = true
+          this._state = 'signed-in'
+          this._lastStableState = 'signed-in'
+        } else {
+          this._stale = false
+          this._state = 'signed-out'
+          this._lastStableState = 'signed-out'
+          this._user = null
+        }
       } else if (controller.signal.aborted) {
         return
       } else {
+        this._stale = false
         this._state = 'error'
         this._lastStableState = 'error'
         this._user = null
       }
     } finally {
-      if (this._loadingTimer !== null) {
-        clearTimeout(this._loadingTimer)
+      clearTimeout(timerId)
+      if (this._loadingTimer === timerId) {
         this._loadingTimer = null
       }
       if (this._abortController === controller) {
@@ -801,6 +861,7 @@ export class YunHeader extends HTMLElement {
   }
 
   private _applySignedOutOrExpired(wasSignedIn: boolean): void {
+    this._stale = false
     this._user = null
     this._menuOpen = false
     if (wasSignedIn) {
@@ -996,33 +1057,47 @@ export class YunHeader extends HTMLElement {
     this._loggingOut = true
     this._renderAccountRegions()
 
+    let ok = false
     try {
       const csrfToken = readCsrfCookie()
-      await fetch(`${this.authBase}/api/auth/logout`, {
+      const response = await fetch(`${this.authBase}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'x-csrf-token': csrfToken,
         },
       })
+      ok = response.ok
     } catch {
-      // Never throw on logout failure; refresh reconciles actual state.
-    } finally {
-      this._loggingOut = false
-      this._menuOpen = false
-      this._lastStableState = 'signed-out'
-      if (this._sheetOpen) {
-        this._setSheetOpen(false, false)
-      }
-      this._announce('Đã đăng xuất')
-      await this.refresh()
-      this.dispatchEvent(
-        new CustomEvent('yh-logout', {
-          bubbles: true,
-          composed: true,
-        }),
-      )
+      ok = false
     }
+
+    this._loggingOut = false
+    this._menuOpen = false
+    if (this._sheetOpen) {
+      this._setSheetOpen(false, false)
+    }
+
+    if (!ok) {
+      this._stale = false
+      this._state = 'error'
+      this._lastStableState = 'error'
+      this._user = null
+      this._renderAccountRegions()
+      this._dispatchAuthChange()
+      return
+    }
+
+    this._stale = false
+    this._lastStableState = 'signed-out'
+    this._announce('Đã đăng xuất')
+    await this.refresh()
+    this.dispatchEvent(
+      new CustomEvent('yh-logout', {
+        bubbles: true,
+        composed: true,
+      }),
+    )
   }
 
   private _setMenuOpen(open: boolean, returnFocus: boolean): void {

@@ -7,9 +7,9 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 | Attribute | Type | Default | Description |
 | --- | --- | --- | --- |
 | `app` | `"portal" \| "tinh-luong" \| "brse" \| "vang-vong" \| "ivf"` | — | Identifies the host application. |
-| `auth-base` | `string` | `"https://www.yundev.space"` | Base URL for `/api/auth/me`, `/api/auth/logout`, and sign-in/sign-up redirects. |
+| `auth-base` | `string` | `"https://www.yundev.space"` | Base URL for `/api/auth/me`, `/api/auth/logout`, and sign-in/sign-up redirects. Allowlisted to `https://yundev.space`, `https://*.yundev.space`, or `http://localhost` / `http://127.0.0.1` (any port); invalid values fall back to the default. |
 | `variant` | `"bar" \| "overlay"` | `"bar"` | `"bar"` renders a 64px sticky bar (56px on `<=640px`); `"overlay"` renders a 48px translucent bar. |
-| `profile-url` | `string` | `${authBase}/?view=profile` | Destination for the "Hồ sơ" menu item. |
+| `profile-url` | `string` | `${authBase}/?view=profile` | Destination for the "Hồ sơ" menu item. Accepts allowlisted origins (same as `auth-base`) or a same-origin relative path starting with `/` (not `//`); invalid values fall back to `${authBase}/?view=profile`. |
 | `hide-account` | `boolean` | `false` | Hides the account block and expired-session notice. |
 | `skip-target` | `string` | `"#main"` | `href` for the skip link ("Bỏ qua đến nội dung"). |
 
@@ -24,7 +24,8 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 ## Properties & Methods
 
 - `el.state` (read-only): `'loading' | 'signed-out' | 'signed-in' | 'expired' | 'error'`
-- `el.user` (read-only): `{ id, email, displayName, avatarUrl, initials } | null`
+- `el.user` (read-only): `{ id, email, displayName, avatarUrl, initials } | null` (`avatarUrl` only accepts `https:` URLs; other schemes or relative paths fall back to initials)
+- `el.stale` (read-only): `boolean` — `true` when a background `refresh()` times out after 3s while already `signed-in` (the header keeps the existing user in `signed-in` state instead of dropping to `signed-out`; the 3s → `signed-out` fallback applies only when no user was signed in).
 - `el.refresh()`: Re-fetches `${authBase}/api/auth/me` with `credentials: 'include'`.
 
 ## Events
@@ -36,7 +37,7 @@ All events bubble and are `composed: true`.
 | `yh-auth-change` | No | `{ state, user }` | Fired when auth state or user settles. |
 | `yh-signin-click` | Yes | — | Fired on "Đăng nhập" / "Đăng nhập lại". If not `preventDefault()`, navigates to `${authBase}/?auth=signin&next=...`. |
 | `yh-signup-click` | Yes | — | Fired on "Đăng ký". If not `preventDefault()`, navigates to `${authBase}/?auth=signup&next=...`. |
-| `yh-logout` | No | — | Fired after `POST ${authBase}/api/auth/logout` and `refresh()`. |
+| `yh-logout` | No | — | Fired after `POST ${authBase}/api/auth/logout` succeeds (`response.ok`) and `refresh()` completes. |
 | `yh-menu-toggle` | No | `{ open }` | Fired when the mobile menu sheet opens or closes. |
 
 ## CSS Parts

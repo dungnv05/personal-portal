@@ -1,34 +1,68 @@
-function e(e) {
+//#region src/yun-header/yun-header.ts
+var e = "https://www.yundev.space";
+function t(e) {
 	return typeof e == "object" && !!e;
 }
-function t(e) {
+function n(e) {
 	if (typeof e != "string") return null;
 	let t = e.trim();
 	return t.length > 0 ? t : null;
 }
-function n(e) {
-	return e && (e.startsWith("/") || e.startsWith("https://") || e.startsWith("http://")) ? e : null;
-}
 function r(e) {
+	if (!e) return null;
+	try {
+		let t = new URL(e);
+		return t.protocol === "https:" ? t.href : null;
+	} catch {
+		return null;
+	}
+}
+function i(e) {
+	if (e.username || e.password) return !1;
+	let t = e.hostname.toLowerCase();
+	return e.protocol === "https:" ? t === "yundev.space" || t.endsWith(".yundev.space") : e.protocol === "http:" ? t === "localhost" || t === "127.0.0.1" : !1;
+}
+function a(t) {
+	let n = t?.trim();
+	if (!n) return e;
+	try {
+		let t = new URL(n);
+		return i(t) ? t.origin : e;
+	} catch {
+		return e;
+	}
+}
+function o(e, t) {
+	let n = `${t}/?view=profile`, r = e?.trim();
+	if (!r) return n;
+	if (r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\")) return r;
+	try {
+		let e = new URL(r);
+		return i(e) ? e.href : n;
+	} catch {
+		return n;
+	}
+}
+function s(e) {
 	let t = e.trim().split(/\s+/).filter(Boolean).slice(0, 2);
 	return t.length === 0 ? "U" : t.map((e) => Array.from(e)[0] ?? "").join("").toUpperCase();
 }
-function i(i) {
-	if (!e(i) || i.ok === !1) return null;
-	let a = i.user;
-	if (!e(a)) return null;
-	let o = t(a.id);
-	if (!o) return null;
-	let s = t(a.email), c = e(a.user_metadata) ? a.user_metadata : null, l = t(a.display_name) ?? (c ? t(c.full_name) : null), u = s && s.split("@")[0]?.trim() || null, d = l ?? u ?? "User";
+function c(e) {
+	if (!t(e) || e.ok === !1) return null;
+	let i = e.user;
+	if (!t(i)) return null;
+	let a = n(i.id);
+	if (!a) return null;
+	let o = n(i.email), c = t(i.user_metadata) ? i.user_metadata : null, l = n(i.display_name) ?? (c ? n(c.full_name) : null), u = o && o.split("@")[0]?.trim() || null, d = l ?? u ?? "User";
 	return {
-		id: o,
-		email: s,
+		id: a,
+		email: o,
 		displayName: d,
-		avatarUrl: n(t(a.avatar_url) ?? (c ? t(c.avatar_url) : null)),
-		initials: r(d)
+		avatarUrl: r(n(i.avatar_url) ?? (c ? n(c.avatar_url) : null)),
+		initials: s(d)
 	};
 }
-function a() {
+function l() {
 	if (typeof document > "u" || !document.cookie) return "";
 	let e = "";
 	for (let t of document.cookie.split(";")) {
@@ -43,13 +77,13 @@ function a() {
 	}
 	return e;
 }
-function o(e, t) {
+function u(e, t) {
 	let n = "http://www.w3.org/2000/svg", r = document.createElementNS(n, "svg");
 	r.setAttribute("viewBox", "0 0 24 24"), r.setAttribute("width", "18"), r.setAttribute("height", "18"), r.setAttribute("fill", "none"), r.setAttribute("stroke", "currentColor"), r.setAttribute("stroke-width", "2"), r.setAttribute("stroke-linecap", "round"), r.setAttribute("stroke-linejoin", "round"), r.setAttribute("aria-hidden", "true"), t && r.setAttribute("class", t);
 	let i = document.createElementNS(n, "path");
 	return i.setAttribute("d", e), r.appendChild(i), r;
 }
-function s(e) {
+function d(e) {
 	let t = document.createElement("span");
 	if (t.className = "yh-avatar", t.setAttribute("aria-hidden", "true"), e.avatarUrl) {
 		let n = document.createElement("img");
@@ -57,7 +91,7 @@ function s(e) {
 	} else t.textContent = e.initials;
 	return t;
 }
-var c = class extends HTMLElement {
+var f = class extends HTMLElement {
 	static get observedAttributes() {
 		return [
 			"app",
@@ -71,6 +105,7 @@ var c = class extends HTMLElement {
 	_state = "loading";
 	_lastStableState = "loading";
 	_user = null;
+	_stale = !1;
 	_menuOpen = !1;
 	_sheetOpen = !1;
 	_loggingOut = !1;
@@ -117,13 +152,14 @@ var c = class extends HTMLElement {
 	get user() {
 		return this._user;
 	}
+	get stale() {
+		return this._stale;
+	}
 	get authBase() {
-		let e = this.getAttribute("auth-base")?.trim() || "https://www.yundev.space";
-		return e.endsWith("/") ? e.slice(0, -1) : e;
+		return a(this.getAttribute("auth-base"));
 	}
 	get profileUrl() {
-		let e = this.getAttribute("profile-url")?.trim();
-		return e && e.length > 0 ? e : `${this.authBase}/?view=profile`;
+		return o(this.getAttribute("profile-url"), this.authBase);
 	}
 	get hideAccount() {
 		return this.hasAttribute("hide-account");
@@ -147,10 +183,10 @@ var c = class extends HTMLElement {
 		this._abortController = e;
 		let t = this._lastStableState === "signed-in";
 		this._state !== "signed-in" && (this._state = "loading", this._renderAccountRegions());
-		let n = !1;
-		this._loadingTimer = setTimeout(() => {
+		let n = !1, r = setTimeout(() => {
 			n = !0, e.abort("timeout");
 		}, 3e3);
+		this._loadingTimer = r;
 		try {
 			let n = await fetch(`${this.authBase}/api/auth/me`, {
 				method: "GET",
@@ -165,23 +201,23 @@ var c = class extends HTMLElement {
 				} catch {
 					e = null;
 				}
-				let r = i(e);
+				let r = c(e);
 				if (r) {
 					let e = this._lastStableState !== "signed-in" || this._user?.id !== r.id;
-					this._state = "signed-in", this._lastStableState = "signed-in", this._user = r, e && this._announce(`Đã đăng nhập với tên ${r.displayName}`);
+					this._stale = !1, this._state = "signed-in", this._lastStableState = "signed-in", this._user = r, e && this._announce(`Đã đăng nhập với tên ${r.displayName}`);
 				} else this._applySignedOutOrExpired(t);
-			} else n.status === 401 ? this._applySignedOutOrExpired(t) : (this._state = "error", this._lastStableState = "error", this._user = null);
+			} else n.status === 401 ? this._applySignedOutOrExpired(t) : (this._stale = !1, this._state = "error", this._lastStableState = "error", this._user = null);
 		} catch {
-			if (n) this._state = "signed-out", this._lastStableState = "signed-out", this._user = null;
+			if (n) t && this._user ? (this._stale = !0, this._state = "signed-in", this._lastStableState = "signed-in") : (this._stale = !1, this._state = "signed-out", this._lastStableState = "signed-out", this._user = null);
 			else if (e.signal.aborted) return;
-			else this._state = "error", this._lastStableState = "error", this._user = null;
+			else this._stale = !1, this._state = "error", this._lastStableState = "error", this._user = null;
 		} finally {
-			this._loadingTimer !== null && (clearTimeout(this._loadingTimer), this._loadingTimer = null), this._abortController === e && (this._abortController = null);
+			clearTimeout(r), this._loadingTimer === r && (this._loadingTimer = null), this._abortController === e && (this._abortController = null);
 		}
 		this._renderAccountRegions(), this._dispatchAuthChange();
 	}
 	_applySignedOutOrExpired(e) {
-		this._user = null, this._menuOpen = !1, e ? (this._state = "expired", this._lastStableState = "expired") : (this._state = "signed-out", this._lastStableState = "signed-out");
+		this._stale = !1, this._user = null, this._menuOpen = !1, e ? (this._state = "expired", this._lastStableState = "expired") : (this._state = "signed-out", this._lastStableState = "signed-out");
 	}
 	_abortPending() {
 		this._loadingTimer !== null && (clearTimeout(this._loadingTimer), this._loadingTimer = null), this._abortController &&= (this._abortController.abort("superseded"), null);
@@ -203,26 +239,26 @@ var c = class extends HTMLElement {
 		}), i.appendChild(this._navSlot);
 		let a = document.createElement("div");
 		a.className = "yh-right";
-		let s = document.createElement("slot");
-		s.name = "actions", this._accountDesktop = document.createElement("div"), this._accountDesktop.className = "yh-account-desktop", this._mobileToggleBtn = document.createElement("button"), this._mobileToggleBtn.type = "button", this._mobileToggleBtn.className = "yh-btn yh-btn-icon yh-mobile-toggle", this._mobileToggleBtn.setAttribute("aria-label", "Mở menu"), this._mobileToggleBtn.setAttribute("aria-expanded", "false"), this._mobileToggleBtn.appendChild(o("M4 6h16M4 12h16M4 18h16")), this._mobileToggleBtn.addEventListener("click", () => {
+		let o = document.createElement("slot");
+		o.name = "actions", this._accountDesktop = document.createElement("div"), this._accountDesktop.className = "yh-account-desktop", this._mobileToggleBtn = document.createElement("button"), this._mobileToggleBtn.type = "button", this._mobileToggleBtn.className = "yh-btn yh-btn-icon yh-mobile-toggle", this._mobileToggleBtn.setAttribute("aria-label", "Mở menu"), this._mobileToggleBtn.setAttribute("aria-expanded", "false"), this._mobileToggleBtn.appendChild(u("M4 6h16M4 12h16M4 18h16")), this._mobileToggleBtn.addEventListener("click", () => {
 			this._setSheetOpen(!this._sheetOpen, !1);
-		}), a.append(s, this._accountDesktop, this._mobileToggleBtn), t.append(this._skipLink, n, i, a), this._expiredNotice = document.createElement("div"), this._expiredNotice.className = "yh-expired-notice", this._expiredNotice.setAttribute("role", "status"), this._expiredNotice.hidden = !0;
-		let c = document.createElement("span");
-		c.textContent = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
-		let l = document.createElement("button");
-		l.type = "button", l.className = "yh-btn yh-btn-primary", l.textContent = "Đăng nhập lại", l.addEventListener("click", () => {
+		}), a.append(o, this._accountDesktop, this._mobileToggleBtn), t.append(this._skipLink, n, i, a), this._expiredNotice = document.createElement("div"), this._expiredNotice.className = "yh-expired-notice", this._expiredNotice.setAttribute("role", "status"), this._expiredNotice.hidden = !0;
+		let s = document.createElement("span");
+		s.textContent = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+		let c = document.createElement("button");
+		c.type = "button", c.className = "yh-btn yh-btn-primary", c.textContent = "Đăng nhập lại", c.addEventListener("click", () => {
 			this._handleAuthClick("signin");
-		}), this._expiredNotice.append(c, l), this._sheetBackdrop = document.createElement("div"), this._sheetBackdrop.className = "yh-sheet-backdrop", this._sheetBackdrop.hidden = !0, this._sheetBackdrop.addEventListener("click", (e) => {
+		}), this._expiredNotice.append(s, c), this._sheetBackdrop = document.createElement("div"), this._sheetBackdrop.className = "yh-sheet-backdrop", this._sheetBackdrop.hidden = !0, this._sheetBackdrop.addEventListener("click", (e) => {
 			e.target === this._sheetBackdrop && this._setSheetOpen(!1, !0);
 		}), this._sheetDialog = document.createElement("div"), this._sheetDialog.className = "yh-sheet", this._sheetDialog.setAttribute("role", "dialog"), this._sheetDialog.setAttribute("aria-modal", "true"), this._sheetDialog.setAttribute("aria-label", "Menu"), this._sheetDialog.addEventListener("keydown", (e) => {
 			this._handleSheetKeyDown(e);
 		});
-		let u = document.createElement("div");
-		u.className = "yh-sheet-header";
+		let l = document.createElement("div");
+		l.className = "yh-sheet-header";
 		let d = document.createElement("span");
-		d.className = "yh-sheet-title", d.textContent = "Menu", this._sheetCloseBtn = document.createElement("button"), this._sheetCloseBtn.type = "button", this._sheetCloseBtn.className = "yh-btn yh-btn-icon", this._sheetCloseBtn.setAttribute("aria-label", "Đóng menu"), this._sheetCloseBtn.appendChild(o("M18 6L6 18M6 6l12 12")), this._sheetCloseBtn.addEventListener("click", () => {
+		d.className = "yh-sheet-title", d.textContent = "Menu", this._sheetCloseBtn = document.createElement("button"), this._sheetCloseBtn.type = "button", this._sheetCloseBtn.className = "yh-btn yh-btn-icon", this._sheetCloseBtn.setAttribute("aria-label", "Đóng menu"), this._sheetCloseBtn.appendChild(u("M18 6L6 18M6 6l12 12")), this._sheetCloseBtn.addEventListener("click", () => {
 			this._setSheetOpen(!1, !0);
-		}), u.append(d, this._sheetCloseBtn), this._sheetNav = document.createElement("div"), this._sheetNav.className = "yh-sheet-nav", this._sheetAccount = document.createElement("div"), this._sheetAccount.className = "yh-sheet-account", this._sheetDialog.append(u, this._sheetNav, this._sheetAccount), this._sheetBackdrop.appendChild(this._sheetDialog), this._liveRegion = document.createElement("div"), this._liveRegion.className = "yh-sr-only", this._liveRegion.setAttribute("aria-live", "polite"), this._liveRegion.setAttribute("aria-atomic", "true"), this._shadow.append(e, t, this._expiredNotice, this._sheetBackdrop, this._liveRegion);
+		}), l.append(d, this._sheetCloseBtn), this._sheetNav = document.createElement("div"), this._sheetNav.className = "yh-sheet-nav", this._sheetAccount = document.createElement("div"), this._sheetAccount.className = "yh-sheet-account", this._sheetDialog.append(l, this._sheetNav, this._sheetAccount), this._sheetBackdrop.appendChild(this._sheetDialog), this._liveRegion = document.createElement("div"), this._liveRegion.className = "yh-sr-only", this._liveRegion.setAttribute("aria-live", "polite"), this._liveRegion.setAttribute("aria-atomic", "true"), this._shadow.append(e, t, this._expiredNotice, this._sheetBackdrop, this._liveRegion);
 	}
 	_syncAttributes() {
 		this._skipLink.href = this.skipTarget;
@@ -252,22 +288,27 @@ var c = class extends HTMLElement {
 		}
 	}
 	async _handleLogout() {
-		if (!this._loggingOut) {
-			this._loggingOut = !0, this._renderAccountRegions();
-			try {
-				let e = a();
-				await fetch(`${this.authBase}/api/auth/logout`, {
-					method: "POST",
-					credentials: "include",
-					headers: { "x-csrf-token": e }
-				});
-			} catch {} finally {
-				this._loggingOut = !1, this._menuOpen = !1, this._lastStableState = "signed-out", this._sheetOpen && this._setSheetOpen(!1, !1), this._announce("Đã đăng xuất"), await this.refresh(), this.dispatchEvent(new CustomEvent("yh-logout", {
-					bubbles: !0,
-					composed: !0
-				}));
-			}
+		if (this._loggingOut) return;
+		this._loggingOut = !0, this._renderAccountRegions();
+		let e = !1;
+		try {
+			let t = l();
+			e = (await fetch(`${this.authBase}/api/auth/logout`, {
+				method: "POST",
+				credentials: "include",
+				headers: { "x-csrf-token": t }
+			})).ok;
+		} catch {
+			e = !1;
 		}
+		if (this._loggingOut = !1, this._menuOpen = !1, this._sheetOpen && this._setSheetOpen(!1, !1), !e) {
+			this._stale = !1, this._state = "error", this._lastStableState = "error", this._user = null, this._renderAccountRegions(), this._dispatchAuthChange();
+			return;
+		}
+		this._stale = !1, this._lastStableState = "signed-out", this._announce("Đã đăng xuất"), await this.refresh(), this.dispatchEvent(new CustomEvent("yh-logout", {
+			bubbles: !0,
+			composed: !0
+		}));
 	}
 	_setMenuOpen(e, t) {
 		this._menuOpen !== e && (this._menuOpen = e, this._accountButtonEl && this._accountButtonEl.setAttribute("aria-expanded", String(e)), this._menuEl && (this._menuEl.hidden = !e), !e && t && this._accountButtonEl?.focus());
@@ -350,7 +391,7 @@ var c = class extends HTMLElement {
 			let t = document.createElement("span");
 			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
 			let n = document.createElement("button");
-			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.title = "Thử lại", n.appendChild(o("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.title = "Thử lại", n.appendChild(u("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
 				this.refresh();
 			}), e.append(t, n), this._accountDesktop.appendChild(e);
 			return;
@@ -360,8 +401,8 @@ var c = class extends HTMLElement {
 			t.type = "button", t.className = "yh-account-btn", t.setAttribute("part", "account-button"), t.setAttribute("aria-haspopup", "menu"), t.setAttribute("aria-expanded", String(this._menuOpen)), t.setAttribute("aria-label", `Tài khoản: ${e.displayName}`);
 			let n = document.createElement("span");
 			n.className = "yh-account-name", n.textContent = e.displayName;
-			let r = o("M6 9l6 6 6-6", "yh-chevron");
-			t.append(s(e), n, r), t.addEventListener("click", () => {
+			let r = u("M6 9l6 6 6-6", "yh-chevron");
+			t.append(d(e), n, r), t.addEventListener("click", () => {
 				this._setMenuOpen(!this._menuOpen, !1);
 			}), t.addEventListener("keydown", (e) => {
 				e.key === "Enter" || e.key === " " || e.key === "ArrowDown" ? (e.preventDefault(), this._setMenuOpen(!0, !1), this._focusMenuItem(0)) : e.key === "Escape" && this._menuOpen && (e.preventDefault(), this._setMenuOpen(!1, !1));
@@ -372,14 +413,14 @@ var c = class extends HTMLElement {
 			});
 			let a = document.createElement("div");
 			a.className = "yh-menu-header";
-			let c = document.createElement("div");
-			c.className = "yh-menu-identity";
-			let l = document.createElement("span");
-			l.className = "yh-menu-name", l.textContent = e.displayName;
-			let u = document.createElement("span");
-			u.className = "yh-menu-email", u.textContent = e.email ?? "", c.append(l, u), a.append(s(e), c);
-			let d = document.createElement("a");
-			d.className = "yh-menu-item", d.setAttribute("role", "menuitem"), d.href = this.profileUrl, d.textContent = "Hồ sơ";
+			let o = document.createElement("div");
+			o.className = "yh-menu-identity";
+			let s = document.createElement("span");
+			s.className = "yh-menu-name", s.textContent = e.displayName;
+			let c = document.createElement("span");
+			c.className = "yh-menu-email", c.textContent = e.email ?? "", o.append(s, c), a.append(d(e), o);
+			let l = document.createElement("a");
+			l.className = "yh-menu-item", l.setAttribute("role", "menuitem"), l.href = this.profileUrl, l.textContent = "Hồ sơ";
 			let f = document.createElement("a");
 			f.className = "yh-menu-item", f.setAttribute("role", "menuitem"), f.href = this.authBase, f.textContent = "Về YunDev.space";
 			let p = document.createElement("hr");
@@ -387,7 +428,7 @@ var c = class extends HTMLElement {
 			let m = document.createElement("button");
 			m.type = "button", m.className = "yh-menu-item", m.setAttribute("role", "menuitem"), m.disabled = this._loggingOut, m.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", m.addEventListener("click", () => {
 				this._handleLogout();
-			}), i.append(a, d, f, p, m), this._accountButtonEl = t, this._menuEl = i, this._accountDesktop.append(t, i);
+			}), i.append(a, l, f, p, m), this._accountButtonEl = t, this._menuEl = i, this._accountDesktop.append(t, i);
 			return;
 		}
 		let e = document.createElement("button");
@@ -415,7 +456,7 @@ var c = class extends HTMLElement {
 			let t = document.createElement("span");
 			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
 			let n = document.createElement("button");
-			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.appendChild(o("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.appendChild(u("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
 				this.refresh();
 			}), e.append(t, n), this._sheetAccount.appendChild(e);
 			return;
@@ -428,17 +469,17 @@ var c = class extends HTMLElement {
 			let r = document.createElement("span");
 			r.className = "yh-menu-name", r.textContent = e.displayName;
 			let i = document.createElement("span");
-			i.className = "yh-menu-email", i.textContent = e.email ?? "", n.append(r, i), t.append(s(e), n);
+			i.className = "yh-menu-email", i.textContent = e.email ?? "", n.append(r, i), t.append(d(e), n);
 			let a = document.createElement("div");
 			a.className = "yh-sheet-account-actions";
 			let o = document.createElement("a");
 			o.className = "yh-menu-item", o.href = this.profileUrl, o.textContent = "Hồ sơ";
-			let c = document.createElement("a");
-			c.className = "yh-menu-item", c.href = this.authBase, c.textContent = "Về YunDev.space";
-			let l = document.createElement("button");
-			l.type = "button", l.className = "yh-menu-item", l.disabled = this._loggingOut, l.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", l.addEventListener("click", () => {
+			let s = document.createElement("a");
+			s.className = "yh-menu-item", s.href = this.authBase, s.textContent = "Về YunDev.space";
+			let c = document.createElement("button");
+			c.type = "button", c.className = "yh-menu-item", c.disabled = this._loggingOut, c.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", c.addEventListener("click", () => {
 				this._handleLogout();
-			}), a.append(o, c, l), this._sheetAccount.append(t, a);
+			}), a.append(o, s, c), this._sheetAccount.append(t, a);
 			return;
 		}
 		let e = document.createElement("div");
@@ -455,9 +496,9 @@ var c = class extends HTMLElement {
 };
 //#endregion
 //#region src/yun-header/index.ts
-function l(e = "yun-header") {
-	typeof customElements < "u" && !customElements.get(e) && customElements.define(e, c);
+function p(e = "yun-header") {
+	typeof customElements < "u" && !customElements.get(e) && customElements.define(e, f);
 }
-l();
+p();
 //#endregion
-export { c as YunHeader, l as defineYunHeader };
+export { f as YunHeader, p as defineYunHeader };

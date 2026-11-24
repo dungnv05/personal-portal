@@ -14,6 +14,29 @@ async function flushMicrotasks(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+function abortablePendingFetch(): {
+  fetchMock: ReturnType<typeof vi.fn>
+  signals: AbortSignal[]
+} {
+  const signals: AbortSignal[] = []
+  const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+    const signal = init?.signal
+    if (signal) {
+      signals.push(signal)
+    }
+    return new Promise<Response>((_resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'))
+        return
+      }
+      signal?.addEventListener('abort', () => {
+        reject(new DOMException('Aborted', 'AbortError'))
+      })
+    })
+  })
+  return { fetchMock, signals }
+}
+
 describe('<yun-header>', () => {
   const originalLocation = window.location
 
@@ -27,6 +50,7 @@ describe('<yun-header>', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     Object.defineProperty(window, 'location', {
@@ -262,5 +286,229 @@ describe('<yun-header>', () => {
     menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(menu.hidden).toBe(true)
     expect(focusSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('transitions to signed-out after 3 s timeout when no user is signed in', async () => {
+    vi.useFakeTimers()
+    const { fetchMock } = abortablePendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    expect(el.state).toBe('loading')
+
+    await vi.advanceTimersByTimeAsync(3100)
+    expect(el.state).toBe('signed-out')
+    expect(el.user).toBeNull()
+  })
+
+  it('handles overlapping refresh() calls without losing the 3 s timeout (M2)', async () => {
+    vi.useFakeTimers()
+    const { fetchMock } = abortablePendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    void el.refresh()
+
+    await vi.advanceTimersByTimeAsync(3100)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(el.state).toBe('signed-out')
+  })
+
+  it('transitions to error on network rejection', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    expect(el.state).toBe('error')
+    expect(el.user).toBeNull()
+  })
+
+  it('aborts in-flight fetch on disconnect and dispatches no state change', async () => {
+    const { fetchMock, signals } = abortablePendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    const authChangeSpy = vi.fn()
+    el.addEventListener('yh-auth-change', authChangeSpy)
+    document.body.appendChild(el)
+
+    expect(signals).toHaveLength(1)
+    expect(signals[0]?.aborted).toBe(false)
+
+    el.remove()
+    await flushMicrotasks()
+
+    expect(signals[0]?.aborted).toBe(true)
+    expect(el.state).toBe('loading')
+    expect(authChangeSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not navigate when yh-signin-click is cancelled with preventDefault', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: false }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const assignMock = vi.fn()
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...originalLocation,
+        href: 'https://www.yundev.space/',
+        assign: assignMock,
+      },
+      configurable: true,
+      writable: true,
+    })
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.addEventListener('yh-signin-click', (event) => {
+      event.preventDefault()
+    })
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const signInBtn = Array.from(el.shadowRoot!.querySelectorAll<HTMLButtonElement>('.yh-account-desktop button'))
+      .find((b) => b.textContent?.trim() === 'Đăng nhập')!
+    signInBtn.click()
+
+    expect(assignMock).not.toHaveBeenCalled()
+  })
+
+  it('sets error state and does not dispatch yh-logout when logout returns 403', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-6', email: 'csrf@yundev.space' },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ error: 'csrf_mismatch' }, 403))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const logoutSpy = vi.fn()
+    el.addEventListener('yh-logout', logoutSpy)
+
+    const accountBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('[part="account-button"]')!
+    accountBtn.click()
+
+    const logoutBtn = Array.from(el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Đăng xuất'))!
+    logoutBtn.click()
+    await flushMicrotasks()
+
+    expect(el.state).toBe('error')
+    expect(logoutSpy).not.toHaveBeenCalled()
+    expect(el.shadowRoot!.querySelector('.yh-account-desktop')?.textContent).toContain('Không tải được tài khoản')
+    expect(el.shadowRoot!.querySelector('.yh-sr-only')?.textContent).not.toContain('Đã đăng xuất')
+  })
+
+  it('keeps signed-in state and marks stale on timeout while already signed in', async () => {
+    vi.useFakeTimers()
+    const { fetchMock: pendingFetch } = abortablePendingFetch()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-7', email: 'stale@yundev.space', display_name: 'Stale User' },
+        }),
+      )
+      .mockImplementationOnce(pendingFetch as typeof fetch)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(el.state).toBe('signed-in')
+    expect(el.stale).toBe(false)
+
+    const refreshPromise = el.refresh()
+    await vi.advanceTimersByTimeAsync(3100)
+    await refreshPromise
+
+    expect(el.state).toBe('signed-in')
+    expect(el.user?.id).toBe('user-7')
+    expect(el.stale).toBe(true)
+  })
+
+  it('allowlists auth-base and profile-url and falls back to defaults for disallowed values', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      jsonResponse({
+        ok: true,
+        user: { id: 'user-8', email: 'allow@yundev.space' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('auth-base', 'https://evil-yundev.space')
+    el.setAttribute('profile-url', '//evil.com/phish')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    expect(fetchMock).toHaveBeenCalledWith('https://www.yundev.space/api/auth/me', expect.any(Object))
+    const profileLink = Array.from(el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]'))
+      .find((a) => a.textContent?.trim() === 'Hồ sơ')
+    expect(profileLink?.getAttribute('href')).toBe('https://www.yundev.space/?view=profile')
+
+    el.setAttribute('auth-base', 'http://localhost:5173/')
+    el.setAttribute('profile-url', '/profile')
+    await flushMicrotasks()
+
+    expect(fetchMock).toHaveBeenLastCalledWith('http://localhost:5173/api/auth/me', expect.any(Object))
+    const updatedProfileLink = Array.from(el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]'))
+      .find((a) => a.textContent?.trim() === 'Hồ sơ')
+    expect(updatedProfileLink?.getAttribute('href')).toBe('/profile')
+
+    el.setAttribute('auth-base', 'javascript:alert(1)')
+    el.setAttribute('profile-url', 'https://yundev.space.evil.com/p')
+    await flushMicrotasks()
+
+    expect(fetchMock).toHaveBeenLastCalledWith('https://www.yundev.space/api/auth/me', expect.any(Object))
+    const fallbackProfileLink = Array.from(el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]'))
+      .find((a) => a.textContent?.trim() === 'Hồ sơ')
+    expect(fallbackProfileLink?.getAttribute('href')).toBe('https://www.yundev.space/?view=profile')
+  })
+
+  it('renders avatar img only for https URLs and falls back to initials otherwise', async () => {
+    const disallowed = [
+      'http://cdn.yundev.space/avatar.png',
+      '//cdn.yundev.space/avatar.png',
+      'data:image/png;base64,AAAA',
+      'javascript:alert(1)',
+      '/avatar.png',
+    ]
+
+    for (const badUrl of disallowed) {
+      document.body.innerHTML = ''
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse({
+          ok: true,
+          user: {
+            id: 'user-avatar',
+            display_name: 'Minh Nguyen',
+            avatar_url: badUrl,
+          },
+        }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const el = document.createElement('yun-header') as YunHeader
+      document.body.appendChild(el)
+      await flushMicrotasks()
+
+      const avatar = el.shadowRoot!.querySelector('[part="account-button"] .yh-avatar')!
+      expect(avatar.querySelector('img')).toBeNull()
+      expect(avatar.textContent?.trim()).toBe('MN')
+    }
   })
 })
