@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted (current implementation in place, migration target defined).
+Accepted — implemented 2026-11-24
 
 ## Context
 
@@ -85,6 +85,37 @@ This target is not implemented in current repository files and is recorded here 
 
 - Current frontend depends on shared storage conventions (`yundev_session`, `yundev_supabase_auth_token`) and optional `/api/config` runtime config fetch path.
 - Planned cookie migration couples frontend and `/api/auth/*` backend contract rollout timing.
+
+## Implementation notes
+
+Shipped on `2026-11-24`, implementing the target cookie-based migration described above.
+
+### Endpoints
+
+- `api/auth/session.js` (`POST /api/auth/session`): validates `{ access_token, refresh_token }` by calling Supabase `/auth/v1/user` and sets the shared session cookies.
+- `api/auth/me.js` (`GET /api/auth/me`): reads and validates the `sb_access` cookie against Supabase `/auth/v1/user` without modifying cookies, returning `{ ok: true, user: { id, email } }`.
+- `api/auth/logout.js` (`POST /api/auth/logout`): verifies the CSRF double-submit token and clears all shared auth cookies (`Max-Age=0`).
+- `api/auth/_helpers.js`: shared CORS allowlist (`ALLOWED_ORIGINS`), cookie parsing/serialization, token validation, and constant-time comparison helpers.
+- `api/config.js`: retained for serving Supabase public runtime configuration (`supabaseUrl`, `supabaseAnonKey`) when build-time values are placeholders.
+
+### Cookie Names and Attributes
+
+All three cookies are issued with `Domain=.yundev.space; Path=/; SameSite=Lax; Secure`:
+
+- `sb_access`: `HttpOnly`, `Max-Age` derived from JWT `exp` (fallback `3600`s).
+- `sb_refresh`: `HttpOnly`, `Max-Age=2592000`.
+- `csrf`: JS-readable (non-`HttpOnly`), 32 random bytes hex-encoded, `Max-Age=2592000`.
+
+The browser client (`src/utils/sharedAuth.ts`) configures Supabase with `persistSession: false` (no access/refresh tokens persisted in `localStorage`) and uses an exact host check (`host === 'yundev.space' || host.endsWith('.yundev.space')`) when clearing legacy cookies. `vercel.json` now serves an 11-directive `Content-Security-Policy`, `Permissions-Policy`, and `X-XSS-Protection: 0`.
+
+### CSRF Mechanism
+
+Double-submit cookie pattern: `/api/auth/session` issues the JS-readable `csrf` cookie; state-changing `/api/auth/logout` requires the client to echo that value in the `x-csrf-token` request header and validates equality in constant time via SHA-256 + `crypto.timingSafeEqual` (`timingSafeEqualStrings` in `api/auth/_helpers.js`).
+
+### Residual Risks
+
+- Refresh token rotation is not implemented (`sb_refresh` is stored as an HttpOnly cookie, but no server-side refresh/rotation endpoint exists yet).
+- No rate limit is enforced on `/api/auth/*` endpoints.
 
 ## Follow-ups
 
