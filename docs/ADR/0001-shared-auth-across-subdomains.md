@@ -18,24 +18,24 @@ Evidence in code:
 
 - `api/config.js` CORS allowlist explicitly includes the three origins above.
 - `src/App.jsx` UI text states account/session synchronization across `*.yundev.space`.
-- `src/utils/sharedAuth.js` computes cookie domain as `.yundev.space` when hostname includes `yundev.space`.
+- Before 2026-11-24, `src/utils/sharedAuth.js` computed cookie domain as `.yundev.space` when hostname included `yundev.space`.
 
 Because users can move between these hosts, the implementation needs shared login state instead of isolated per-subdomain sessions.
 
 ## Decision
 
-### Current (Implemented Today)
+### Previous (Before 2026-11-24)
 
-Use Supabase browser auth with a custom storage adapter in `src/utils/sharedAuth.js`:
+Before 2026-11-24, the client used Supabase browser auth with a custom storage adapter in `src/utils/sharedAuth.js`:
 
-- `storageKey` is `yundev_supabase_auth_token`.
-- Session artifacts are replicated to both cookie storage and `localStorage`.
-- Additional key `yundev_session` mirrors access token state.
-- `syncSharedSSOSession()` reconciles local app session with shared cookie state.
+- `storageKey` was `yundev_supabase_auth_token`.
+- Session artifacts were replicated to both cookie storage and `localStorage`.
+- Additional key `yundev_session` mirrored access token state.
+- `syncSharedSSOSession()` reconciled local app session with shared cookie state.
 
-This decision is implemented and active.
+This approach was replaced on 2026-11-24 by the server-issued HttpOnly cookie architecture below.
 
-### Target (Planned Migration)
+### Target (Implemented 2026-11-24)
 
 Move session issuance to backend endpoints under `/api/auth/*` and store session in:
 
@@ -46,11 +46,11 @@ Move session issuance to backend endpoints under `/api/auth/*` and store session
 
 Add CSRF double-submit protection for state-changing requests.
 
-This target is not implemented in current repository files and is recorded here as migration direction.
+This target was implemented on 2026-11-24 and is active in the current repository (see Implementation notes below).
 
 ## Alternatives Considered
 
-### 1) LocalStorage Replication (current approach)
+### 1) LocalStorage Replication (previous approach, before 2026-11-24)
 
 - Pros: simple browser-only implementation, no additional backend auth endpoint required.
 - Cons: token material is accessible to JavaScript (XSS exposure), logout and sync semantics depend on client polling/events.
@@ -74,17 +74,17 @@ This target is not implemented in current repository files and is recorded here 
 
 ### Security
 
-- Current token replication to browser-readable storage increases XSS blast radius.
-- Current approach uses cookie + localStorage sync and does not provide CSRF protections associated with server-issued cookie sessions.
+- Before 2026-11-24, token replication to browser-readable storage increased XSS blast radius; tokens are now stored in server-issued HttpOnly cookies.
+- Before 2026-11-24, cookie + localStorage sync did not provide CSRF protections; the server-issued cookie flow now enforces double-submit CSRF validation on `/api/auth/logout`.
 
 ### Logout Semantics
 
-- Current logout propagation relies on shared cookie/localStorage state and periodic/client event-based sync (`focus`, `visibilitychange`, `storage`, interval polling).
+- Before 2026-11-24, logout propagation relied on shared cookie/localStorage state and periodic/client event-based sync (`focus`, `visibilitychange`, `storage`, interval polling); logout now clears server-issued cookies via `POST /api/auth/logout`.
 
 ### Deploy Coupling
 
-- Current frontend depends on shared storage conventions (`yundev_session`, `yundev_supabase_auth_token`) and optional `/api/config` runtime config fetch path.
-- Planned cookie migration couples frontend and `/api/auth/*` backend contract rollout timing.
+- Before 2026-11-24, the frontend depended on shared storage conventions (`yundev_session`, `yundev_supabase_auth_token`); it still retains the optional `/api/config` runtime config fetch path.
+- The 2026-11-24 cookie migration couples frontend and `/api/auth/*` backend contract rollout timing.
 
 ## Implementation notes
 
@@ -119,6 +119,6 @@ Double-submit cookie pattern: `/api/auth/session` issues the JS-readable `csrf` 
 
 ## Follow-ups
 
-1. Migration task reference: `AUTH-MIG-0001` (to be created) for `/api/auth/*` cookie-based auth rollout.
-2. Add `Content-Security-Policy` in deployment headers and enforce it before or during auth migration.
-3. Define explicit CSRF double-submit token format and verification points for `/api/auth/*`.
+1. Implement server-side refresh-token rotation using the HttpOnly `sb_refresh` cookie.
+2. Add rate limiting on `/api/auth/*` endpoints.
+3. Complete RLS and edge review items.

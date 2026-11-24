@@ -264,13 +264,14 @@ Sources: `src/utils/sharedAuth.ts`, `api/config.js`, `api/auth/_helpers.js`, `ap
 
 ## 10) Current Limitations
 
-- Auth storage, CSP, and XSS header gaps previously tracked here are resolved (shipped 2026-11-24):
-  - Auth tokens are no longer stored in `localStorage` or JS-writable cookies (`persistSession: false` on the Supabase client; `sb_access` and `sb_refresh` are HttpOnly cookies issued by `/api/auth/session`, with double-submit `csrf` verification on `/api/auth/logout`).
-  - `vercel.json` now serves an 11-directive `Content-Security-Policy` and `Permissions-Policy`.
-  - `X-XSS-Protection` is now set to `0` (disabling the deprecated XSS auditor).
-- Remaining limitations:
-  - Refresh token rotation is not implemented (no server-side refresh flow using `sb_refresh`).
-  - No rate limiting on `/api/auth/*` endpoints.
-  - Hardcoded origin allowlists in `api/config.js` and `api/auth/_helpers.js`.
+- Refresh token rotation is not implemented (no server-side refresh flow using `sb_refresh`).
+- No rate limiting on `/api/auth/*` endpoints.
+- Hardcoded origin allowlists in `api/config.js` and `api/auth/_helpers.js`.
+
+### Implemented 2026-11-24
+
+- Auth tokens are no longer stored in `localStorage` or JS-writable cookies (`persistSession: false` on the Supabase client; `sb_access` and `sb_refresh` are HttpOnly cookies issued by `/api/auth/session`, with double-submit `csrf` verification on `/api/auth/logout`).
+- `vercel.json` serves an 11-directive `Content-Security-Policy` and `Permissions-Policy`.
+- `X-XSS-Protection` is set to `0` (disabling the deprecated XSS auditor).
 
 Sources: `src/utils/sharedAuth.ts`, `vercel.json`, `api/config.js`, `api/auth/_helpers.js`, `api/auth/session.js`, `api/auth/me.js`, `api/auth/logout.js`.
