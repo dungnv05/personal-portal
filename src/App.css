@@ -23,12 +23,20 @@ yun-header {
   --yh-on-primary: var(--accent-ink);
   --yh-focus: var(--accent);
   --yh-border: var(--border);
+  --yh-toggle-border: var(--btn-secondary-border);
+  --yh-toggle-hover-bg: var(--surface-2);
+  --yh-toggle-radius: var(--radius-sm);
   --yh-font: var(--font-sans);
   --yh-radius: var(--radius-sm);
 }
 
+:root[data-theme="light"] yun-header {
+  /* --accent-strong (#8B6FF0) vs light --bg-soft (#F6F1EA) contrast ratio is ~3.32:1 (>= 3:1) */
+  --yh-focus: var(--accent-strong);
+}
+
 @media (prefers-color-scheme: light) {
-  yun-header {
+  :root:not([data-theme="dark"]) yun-header {
     /* --accent-strong (#8B6FF0) vs light --bg-soft (#F6F1EA) contrast ratio is ~3.32:1 (>= 3:1) */
     --yh-focus: var(--accent-strong);
   }
@@ -702,8 +710,12 @@ yun-header {
 }
 
 /* --- Light Theme Coherence & Contrast --- */
+:root[data-theme="light"] .auth-switch-link:hover {
+  color: var(--accent-badge-text);
+}
+
 @media (prefers-color-scheme: light) {
-  .auth-switch-link:hover {
+  :root:not([data-theme="dark"]) .auth-switch-link:hover {
     color: var(--accent-badge-text);
   }
 }

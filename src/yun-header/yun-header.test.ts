@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineYunHeader, isAllowedAuthOrigin, YunHeader } from './index'
+import { defineYunHeader, isAllowedAuthOrigin, THEME_EVENT, YunHeader } from './index'
 import { __resetRefreshCoordinatorForTests } from '../shared-auth/refreshCoordinator'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -49,6 +49,10 @@ describe('<yun-header>', () => {
     document.body.innerHTML = ''
     __resetRefreshCoordinatorForTests()
     document.cookie = 'csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
+    document.cookie = 'yun_theme=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
+    window.localStorage.removeItem('yun-theme')
+    window.localStorage.removeItem('theme')
+    document.documentElement.dataset.theme = 'light'
   })
 
   afterEach(() => {
@@ -508,7 +512,7 @@ describe('<yun-header>', () => {
 
     for (const badUrl of disallowed) {
       document.body.innerHTML = ''
-    __resetRefreshCoordinatorForTests()
+      __resetRefreshCoordinatorForTests()
       const fetchMock = vi.fn().mockResolvedValue(
         jsonResponse({
           ok: true,
@@ -553,7 +557,7 @@ describe('<yun-header>', () => {
 
     for (let i = 0; i < badProfileUrls.length; i += 1) {
       document.body.innerHTML = ''
-    __resetRefreshCoordinatorForTests()
+      __resetRefreshCoordinatorForTests()
       fetchMock.mockClear()
       const el = document.createElement('yun-header') as YunHeader
       el.setAttribute('auth-base', badAuthBases[i]!)
@@ -777,5 +781,85 @@ describe('<yun-header>', () => {
     expect(authChangeSpy).toHaveBeenCalledTimes(1)
     const event = authChangeSpy.mock.calls[0]?.[0] as CustomEvent<{ state: string }> | undefined
     expect(event?.detail.state).toBe('signed-out')
+  })
+
+  it('renders theme toggle in shadow root after actions slot and before account block', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: false }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const right = el.shadowRoot!.querySelector('.yh-right')!
+    const children = Array.from(right.children)
+    const actionsIdx = children.findIndex((c) => c.tagName === 'SLOT' && c.getAttribute('name') === 'actions')
+    const toggleIdx = children.findIndex((c) => c.classList.contains('yh-theme-toggle'))
+    const accountIdx = children.findIndex((c) => c.classList.contains('yh-account-desktop'))
+
+    expect(actionsIdx).toBeGreaterThanOrEqual(0)
+    expect(toggleIdx).toBe(actionsIdx + 1)
+    expect(accountIdx).toBe(toggleIdx + 1)
+
+    const toggle = children[toggleIdx] as HTMLButtonElement
+    expect(toggle.hidden).toBe(false)
+    expect(toggle.getAttribute('aria-label')).toBe('Chuyển chế độ sáng/tối')
+    expect(toggle.getAttribute('title')).toBe('Chuyển chế độ sáng/tối')
+  })
+
+  it('swaps icon and aria-pressed and flips data-theme + fires yh-theme-change on click', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: false }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    document.documentElement.dataset.theme = 'light'
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>('.yh-theme-toggle')!
+    expect(el.theme).toBe('light')
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    // Light mode shows moon icon (single path, no circle)
+    expect(toggle.querySelector('svg circle')).toBeNull()
+    expect(toggle.querySelector('svg path')?.getAttribute('d')).toBe('M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z')
+
+    const events: Array<{ theme: string; source: string }> = []
+    const onTheme = (e: Event) => {
+      events.push((e as CustomEvent<{ theme: string; source: string }>).detail)
+    }
+    document.addEventListener(THEME_EVENT, onTheme)
+
+    toggle.click()
+
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(el.theme).toBe('dark')
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    // Dark mode shows sun icon (circle + 8 ray paths)
+    expect(toggle.querySelector('svg circle')).not.toBeNull()
+    expect(toggle.querySelectorAll('svg path')).toHaveLength(8)
+    expect(events).toEqual([{ theme: 'dark', source: 'user' }])
+
+    el.setTheme('light')
+    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(toggle.querySelector('svg circle')).toBeNull()
+
+    document.removeEventListener(THEME_EVENT, onTheme)
+  })
+
+  it('hides theme toggle when no-theme-toggle attribute is present', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: false }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('no-theme-toggle', '')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>('.yh-theme-toggle')!
+    expect(toggle.hidden).toBe(true)
+
+    el.removeAttribute('no-theme-toggle')
+    expect(toggle.hidden).toBe(false)
   })
 })
