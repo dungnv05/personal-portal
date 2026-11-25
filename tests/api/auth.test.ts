@@ -1411,7 +1411,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
           method: 'POST',
           headers: {
             origin: 'https://www.yundev.space',
-            cookie: `sb_access=valid-access; csrf=${validCsrf}`,
+            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
             'x-csrf-token': validCsrf,
           },
           body: { display_name: badName },
@@ -1515,7 +1515,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         res,
       )
 
-      expect(fetchMock).toHaveBeenCalledTimes(1)
+      // D3-a: an expired session must never reach the Supabase PUT (no write at all).
+      expect(fetchMock).not.toHaveBeenCalled()
       expect(res.statusCode).toBe(401)
       expect(res.body).toEqual({ ok: false, error: 'unauthorized' })
     })
