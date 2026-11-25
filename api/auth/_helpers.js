@@ -14,7 +14,9 @@ export const COOKIE_DOMAIN = '.yundev.space';
 export const COOKIE_PATH = '/';
 export const ACCESS_FALLBACK_MAX_AGE = 3600;
 export const REFRESH_MAX_AGE = 2592000;
+export const SESSION_ABSOLUTE_MAX_AGE = 14 * 24 * 60 * 60;
 
+const CLOCK_SKEW_TOLERANCE_SEC = 300;
 const DEFAULT_ALLOWED_ORIGIN = 'https://yundev.space';
 const ALLOWED_HEADERS = 'content-type, x-csrf-token';
 
@@ -144,6 +146,63 @@ export function serializeCookie(name, value, { httpOnly, maxAge }) {
   parts.push(`Domain=${COOKIE_DOMAIN}`);
   parts.push(`Max-Age=${maxAge}`);
   return parts.join('; ');
+}
+
+export function clearSessionCookies() {
+  return [
+    serializeCookie('sb_access', '', { httpOnly: true, maxAge: 0 }),
+    serializeCookie('sb_refresh', '', { httpOnly: true, maxAge: 0 }),
+    serializeCookie('csrf', '', { httpOnly: false, maxAge: 0 }),
+  ];
+}
+
+export function getPasswordAuthTime(accessToken) {
+  if (typeof accessToken !== 'string') {
+    return null;
+  }
+  const parts = accessToken.split('.');
+  if (parts.length !== 3 || !parts[1]) {
+    return null;
+  }
+  try {
+    const payloadText = Buffer.from(parts[1], 'base64url').toString('utf8');
+    const payload = JSON.parse(payloadText);
+    if (!payload || typeof payload !== 'object' || !Array.isArray(payload.amr)) {
+      return null;
+    }
+    let maxPasswordTime = null;
+    let maxAnyTime = null;
+    for (const entry of payload.amr) {
+      if (!entry || typeof entry !== 'object') {
+        continue;
+      }
+      const ts = entry.timestamp;
+      if (typeof ts !== 'number' || !Number.isFinite(ts)) {
+        continue;
+      }
+      if (entry.method === 'password' && (maxPasswordTime === null || ts > maxPasswordTime)) {
+        maxPasswordTime = ts;
+      }
+      if (maxAnyTime === null || ts > maxAnyTime) {
+        maxAnyTime = ts;
+      }
+    }
+    return maxPasswordTime !== null ? maxPasswordTime : maxAnyTime;
+  } catch {
+    return null;
+  }
+}
+
+export function isSessionPastAbsoluteCap(accessToken, nowMs = Date.now()) {
+  const authTime = getPasswordAuthTime(accessToken);
+  if (authTime === null) {
+    return true;
+  }
+  const nowSec = Math.floor(nowMs / 1000);
+  if (authTime - nowSec > CLOCK_SKEW_TOLERANCE_SEC) {
+    return true;
+  }
+  return nowSec - authTime > SESSION_ABSOLUTE_MAX_AGE;
 }
 
 export function computeAccessMaxAge(accessToken) {

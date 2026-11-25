@@ -2,6 +2,7 @@ import {
   applyCors,
   buildUserPayload,
   getHeader,
+  isSessionPastAbsoluteCap,
   isValidCookieToken,
   parseCookies,
   parseJsonBody,
@@ -82,6 +83,10 @@ export default async function handler(req, res) {
 
   if (!response.ok) {
     return res.status(502).json({ ok: false, error: 'auth_upstream_error' });
+  }
+
+  if (isSessionPastAbsoluteCap(accessToken)) {
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 
   let payload;

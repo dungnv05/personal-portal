@@ -7,7 +7,13 @@ import refreshHandler from '../../api/auth/refresh.js'
 import profileHandler from '../../api/auth/profile.js'
 import saveHandler from '../../api/save.js'
 import configHandler from '../../api/config.js'
-import { shouldAllowDevOrigins } from '../../api/auth/_helpers.js'
+import {
+  SESSION_ABSOLUTE_MAX_AGE,
+  clearSessionCookies,
+  getPasswordAuthTime,
+  isSessionPastAbsoluteCap,
+  shouldAllowDevOrigins,
+} from '../../api/auth/_helpers.js'
 import { resetMemoryRateLimitStore } from '../../api/auth/_ratelimit.js'
 
 type MockRequest = {
@@ -75,6 +81,23 @@ function createFakeJwt(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' }), 'utf8').toString('base64url')
   const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
   return `${header}.${body}.test-signature`
+}
+
+function makeJwt({
+  amr,
+  exp,
+}: {
+  amr?: Array<{ method?: string; timestamp?: unknown }>
+  exp?: number
+} = {}): string {
+  const payload: Record<string, unknown> = { sub: 'user-test' }
+  if (amr !== undefined) {
+    payload.amr = amr
+  }
+  if (exp !== undefined) {
+    payload.exp = exp
+  }
+  return createFakeJwt(payload)
 }
 
 describe('serverless auth endpoints (/api/auth/*)', () => {
@@ -159,7 +182,11 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       vi.setSystemTime(fixedNowMs)
 
       const nowSeconds = Math.floor(fixedNowMs / 1000)
-      const accessToken = createFakeJwt({ sub: 'user-123', exp: nowSeconds + 1800 })
+      const accessToken = createFakeJwt({
+        sub: 'user-123',
+        exp: nowSeconds + 1800,
+        amr: [{ method: 'password', timestamp: nowSeconds - 60 }],
+      })
       const refreshToken = 'refresh-token-abc123'
 
       const fetchMock = vi.fn(() =>
@@ -229,7 +256,9 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
     })
 
     it('falls back to Max-Age=3600 when access_token has no exp claim', async () => {
-      const accessToken = 'opaque-valid-access-token'
+      const accessToken = makeJwt({
+        amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }],
+      })
       const refreshToken = 'opaque-refresh-token'
 
       vi.stubGlobal(
@@ -388,7 +417,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         method: 'GET',
         headers: {
           origin: 'https://tinh-luong.yundev.space',
-          cookie: 'other=1; sb_access=valid-cookie-token; csrf=abc',
+          cookie: `other=1; sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=abc`,
         },
       })
       const res = createMockRes()
@@ -400,7 +429,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         method: 'GET',
         headers: {
           apikey: TEST_SUPABASE_ANON_KEY,
-          Authorization: 'Bearer valid-cookie-token',
+          Authorization: expect.stringMatching(/^Bearer eyJ/),
         },
       })
       expect(res.statusCode).toBe(200)
@@ -475,7 +504,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         method: 'POST',
         headers: {
           origin: 'https://yundev.space',
-          cookie: `sb_access=tok; csrf=${validCsrf}`,
+          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
         },
       })
       const res = createMockRes()
@@ -665,7 +694,11 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       vi.setSystemTime(fixedNowMs)
       const nowSeconds = Math.floor(fixedNowMs / 1000)
 
-      const newAccess = createFakeJwt({ sub: 'user-1', exp: nowSeconds + 3600 })
+      const newAccess = createFakeJwt({
+        sub: 'user-1',
+        exp: nowSeconds + 3600,
+        amr: [{ method: 'password', timestamp: nowSeconds - 60 }],
+      })
       const newRefresh = 'rotated-refresh-token-xyz'
 
       const fetchMock = vi.fn(() =>
@@ -856,7 +889,11 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
     })
 
     it('falls back to validateSupabaseAccessToken when refresh payload omits user (S6)', async () => {
-      const newAccess = createFakeJwt({ sub: 'user-fb', exp: Math.floor(Date.now() / 1000) + 3600 })
+      const newAccess = createFakeJwt({
+        sub: 'user-fb',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }],
+      })
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(
@@ -895,6 +932,314 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         },
       })
       expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('14-day absolute session cap (S9)', () => {
+    it('allows session and me when password login was 13 days ago', async () => {
+      vi.useFakeTimers()
+      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      vi.setSystemTime(fixedNowMs)
+      const nowSec = Math.floor(fixedNowMs / 1000)
+
+      const token13d = makeJwt({
+        exp: nowSec + 1800,
+        amr: [{ method: 'password', timestamp: nowSec - 13 * 24 * 60 * 60 }],
+      })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ id: 'user-13d', email: 'u13@yundev.space' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          ),
+        ),
+      )
+
+      const sessionRes = createMockRes()
+      await sessionHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://yundev.space',
+            'content-type': 'application/json',
+          },
+          body: { access_token: token13d, refresh_token: 'ref-13d' },
+        }),
+        sessionRes,
+      )
+      expect(sessionRes.statusCode).toBe(200)
+      expect(Array.isArray(sessionRes.getHeader('set-cookie'))).toBe(true)
+
+      const meRes = createMockRes()
+      await meHandler(
+        createMockReq({
+          method: 'GET',
+          headers: {
+            origin: 'https://yundev.space',
+            cookie: `sb_access=${token13d}`,
+          },
+        }),
+        meRes,
+      )
+      expect(meRes.statusCode).toBe(200)
+      expect(meRes.getHeader('set-cookie')).toBeUndefined()
+    })
+
+    it('rejects me and session with 401 session_expired when password login was 15 days ago', async () => {
+      vi.useFakeTimers()
+      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      vi.setSystemTime(fixedNowMs)
+      const nowSec = Math.floor(fixedNowMs / 1000)
+
+      const token15d = makeJwt({
+        exp: nowSec + 1800,
+        amr: [{ method: 'password', timestamp: nowSec - 15 * 24 * 60 * 60 }],
+      })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ id: 'user-15d', email: 'u15@yundev.space' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          ),
+        ),
+      )
+
+      const meRes = createMockRes()
+      await meHandler(
+        createMockReq({
+          method: 'GET',
+          headers: {
+            origin: 'https://yundev.space',
+            cookie: `sb_access=${token15d}`,
+          },
+        }),
+        meRes,
+      )
+      expect(meRes.statusCode).toBe(401)
+      expect(meRes.body).toEqual({ ok: false, error: 'session_expired' })
+      expect(meRes.getHeader('set-cookie')).toBeUndefined()
+
+      const sessionRes = createMockRes()
+      await sessionHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://yundev.space',
+            'content-type': 'application/json',
+          },
+          body: { access_token: token15d, refresh_token: 'ref-15d' },
+        }),
+        sessionRes,
+      )
+      expect(sessionRes.statusCode).toBe(401)
+      expect(sessionRes.body).toEqual({ ok: false, error: 'session_expired' })
+      expect(sessionRes.getHeader('set-cookie')).toBeUndefined()
+    })
+
+    it('rejects refresh at 15 days with 401 session_expired and cleared cookies, while allowing 13 days', async () => {
+      vi.useFakeTimers()
+      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      vi.setSystemTime(fixedNowMs)
+      const nowSec = Math.floor(fixedNowMs / 1000)
+      const validCsrf = 'f'.repeat(64)
+
+      const token15d = makeJwt({
+        exp: nowSec + 3600,
+        amr: [{ method: 'password', timestamp: nowSec - 15 * 24 * 60 * 60 }],
+      })
+      const token13d = makeJwt({
+        exp: nowSec + 3600,
+        amr: [{ method: 'password', timestamp: nowSec - 13 * 24 * 60 * 60 }],
+      })
+
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                access_token: token15d,
+                refresh_token: 'new-ref-15d',
+                user: { id: 'user-r', email: 'r@yundev.space' },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                access_token: token13d,
+                refresh_token: 'new-ref-13d',
+                user: { id: 'user-r', email: 'r@yundev.space' },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          ),
+      )
+
+      const expiredRes = createMockRes()
+      await refreshHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://yundev.space',
+            cookie: `sb_refresh=old-ref; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+        }),
+        expiredRes,
+      )
+      expect(expiredRes.statusCode).toBe(401)
+      expect(expiredRes.body).toEqual({ ok: false, error: 'session_expired' })
+      expect(expiredRes.getHeader('set-cookie')).toEqual(clearSessionCookies())
+
+      const validRes = createMockRes()
+      await refreshHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://yundev.space',
+            cookie: `sb_refresh=old-ref; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+        }),
+        validRes,
+      )
+      expect(validRes.statusCode).toBe(200)
+      expect(validRes.body).toEqual({
+        ok: true,
+        user: {
+          id: 'user-r',
+          email: 'r@yundev.space',
+          display_name: null,
+          avatar_url: null,
+        },
+      })
+    })
+
+    it('resets the cap on a new password login (newest password amr wins)', async () => {
+      vi.useFakeTimers()
+      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      vi.setSystemTime(fixedNowMs)
+      const nowSec = Math.floor(fixedNowMs / 1000)
+
+      const oldOnlyToken = makeJwt({
+        exp: nowSec + 1800,
+        amr: [{ method: 'password', timestamp: nowSec - 20 * 24 * 60 * 60 }],
+      })
+      const reloginToken = makeJwt({
+        exp: nowSec + 1800,
+        amr: [
+          { method: 'password', timestamp: nowSec - 20 * 24 * 60 * 60 },
+          { method: 'password', timestamp: nowSec - 10 },
+        ],
+      })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ id: 'user-relogin', email: 'relogin@yundev.space' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          ),
+        ),
+      )
+
+      const oldRes = createMockRes()
+      await sessionHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://yundev.space',
+            'content-type': 'application/json',
+          },
+          body: { access_token: oldOnlyToken, refresh_token: 'ref-old' },
+        }),
+        oldRes,
+      )
+      expect(oldRes.statusCode).toBe(401)
+      expect(oldRes.body).toEqual({ ok: false, error: 'session_expired' })
+
+      const freshRes = createMockRes()
+      await sessionHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://yundev.space',
+            'content-type': 'application/json',
+          },
+          body: { access_token: reloginToken, refresh_token: 'ref-fresh' },
+        }),
+        freshRes,
+      )
+      expect(freshRes.statusCode).toBe(200)
+      expect(Array.isArray(freshRes.getHeader('set-cookie'))).toBe(true)
+    })
+
+    it('unit: getPasswordAuthTime and isSessionPastAbsoluteCap handle amr selection, fallback, null, and skew', () => {
+      const nowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      const nowSec = Math.floor(nowMs / 1000)
+
+      const multiPassword = makeJwt({
+        amr: [
+          { method: 'otp', timestamp: 9999999999 },
+          { method: 'password', timestamp: 1000 },
+          { method: 'password', timestamp: 2000 },
+        ],
+      })
+      expect(getPasswordAuthTime(multiPassword)).toBe(2000)
+
+      const fallbackAny = makeJwt({
+        amr: [
+          { method: 'otp', timestamp: 1500 },
+          { method: 'oauth', timestamp: 2500 },
+        ],
+      })
+      expect(getPasswordAuthTime(fallbackAny)).toBe(2500)
+
+      expect(getPasswordAuthTime(makeJwt({}))).toBeNull()
+      expect(getPasswordAuthTime(makeJwt({ amr: [] }))).toBeNull()
+      expect(getPasswordAuthTime(makeJwt({ amr: [{ method: 'password', timestamp: Number.NaN }] }))).toBeNull()
+      expect(getPasswordAuthTime('not-a-jwt')).toBeNull()
+      expect(getPasswordAuthTime('a.!!!.c')).toBeNull()
+      expect(getPasswordAuthTime(null as unknown as string)).toBeNull()
+
+      expect(isSessionPastAbsoluteCap('not-a-jwt', nowMs)).toBe(true)
+      expect(
+        isSessionPastAbsoluteCap(
+          makeJwt({ amr: [{ method: 'password', timestamp: nowSec + 301 }] }),
+          nowMs,
+        ),
+      ).toBe(true)
+      expect(
+        isSessionPastAbsoluteCap(
+          makeJwt({ amr: [{ method: 'password', timestamp: nowSec + 300 }] }),
+          nowMs,
+        ),
+      ).toBe(false)
+      expect(
+        isSessionPastAbsoluteCap(
+          makeJwt({ amr: [{ method: 'password', timestamp: nowSec - SESSION_ABSOLUTE_MAX_AGE }] }),
+          nowMs,
+        ),
+      ).toBe(false)
+      expect(
+        isSessionPastAbsoluteCap(
+          makeJwt({ amr: [{ method: 'password', timestamp: nowSec - SESSION_ABSOLUTE_MAX_AGE - 1 }] }),
+          nowMs,
+        ),
+      ).toBe(true)
     })
   })
 
@@ -1080,6 +1425,9 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
     })
 
     it('updates user_metadata.full_name via Supabase and returns updated user', async () => {
+      const validToken = makeJwt({
+        amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }],
+      })
       const fetchMock = vi.fn(() =>
         Promise.resolve(
           new Response(
@@ -1098,7 +1446,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         method: 'POST',
         headers: {
           origin: 'https://www.yundev.space',
-          cookie: `sb_access=valid-access; csrf=${validCsrf}`,
+          cookie: `sb_access=${validToken}; csrf=${validCsrf}`,
           'x-csrf-token': validCsrf,
         },
         body: { display_name: '  Yun Nguyen  ' },
@@ -1111,7 +1459,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         method: 'PUT',
         headers: {
           apikey: TEST_SUPABASE_ANON_KEY,
-          Authorization: 'Bearer valid-access',
+          Authorization: `Bearer ${validToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ data: { full_name: 'Yun Nguyen' } }),
@@ -1126,6 +1474,50 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
           avatar_url: null,
         },
       })
+    })
+
+    it('returns 401 unauthorized when sb_access is past the 14-day absolute cap (S9)', async () => {
+      vi.useFakeTimers()
+      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      vi.setSystemTime(fixedNowMs)
+      const nowSec = Math.floor(fixedNowMs / 1000)
+
+      const expiredToken = makeJwt({
+        exp: nowSec + 3600,
+        amr: [{ method: 'password', timestamp: nowSec - 15 * 24 * 60 * 60 }],
+      })
+
+      const fetchMock = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'user-99',
+              email: 'yun@yundev.space',
+              user_metadata: { full_name: 'Yun Nguyen' },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const res = createMockRes()
+      await profileHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://www.yundev.space',
+            cookie: `sb_access=${expiredToken}; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+          body: { display_name: 'Yun Nguyen' },
+        }),
+        res,
+      )
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(res.statusCode).toBe(401)
+      expect(res.body).toEqual({ ok: false, error: 'unauthorized' })
     })
 
     it('returns 403 on missing/mismatched CSRF, 401 without sb_access, and 401 on upstream 401 (S6)', async () => {
@@ -1187,6 +1579,43 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
   describe('GET/PUT /api/save', () => {
     const validCsrf = 'e'.repeat(64)
 
+    it('returns 401 unauthorized when sb_access is past the 14-day absolute cap (S9)', async () => {
+      vi.useFakeTimers()
+      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      vi.setSystemTime(fixedNowMs)
+      const nowSec = Math.floor(fixedNowMs / 1000)
+
+      process.env.CLOUD_SAVE_ENABLED = 'true'
+      const expiredToken = makeJwt({
+        exp: nowSec + 3600,
+        amr: [{ method: 'password', timestamp: nowSec - 15 * 24 * 60 * 60 }],
+      })
+
+      const fetchMock = vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
+        ),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const res = createMockRes()
+      await saveHandler(
+        createMockReq({
+          method: 'GET',
+          headers: {
+            origin: 'https://vang-vong-su-viet.yundev.space',
+            cookie: `sb_access=${expiredToken}`,
+          },
+          query: { game: 'vang-vong', slot: '0' },
+        }),
+        res,
+      )
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(res.statusCode).toBe(401)
+      expect(res.body).toEqual({ ok: false, error: 'unauthorized' })
+    })
+
     it('returns 503 cloud_save_disabled when CLOUD_SAVE_ENABLED is not true', async () => {
       const req = createMockReq({
         method: 'GET',
@@ -1239,7 +1668,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         method: 'GET',
         headers: {
           origin: 'https://vang-vong-su-viet.yundev.space',
-          cookie: `sb_access=tok; csrf=${validCsrf}`,
+          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
         },
         query: { game: 'vang-vong', slot: '1' },
       })
@@ -1256,7 +1685,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         method: 'PUT',
         headers: {
           origin: 'https://vang-vong-su-viet.yundev.space',
-          cookie: `sb_access=tok; csrf=${validCsrf}`,
+          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
           'x-csrf-token': validCsrf,
         },
         query: { game: 'vang-vong', slot: '1' },
@@ -1270,7 +1699,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       // Bad slot -> 400
       const badSlotReq = createMockReq({
         method: 'GET',
-        headers: { cookie: `sb_access=tok` },
+        headers: { cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}` },
         query: { game: 'vang-vong', slot: '3' },
       })
       const badSlotRes = createMockRes()
@@ -1281,7 +1710,9 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       // PUT without CSRF -> 403
       const noCsrfReq = createMockReq({
         method: 'PUT',
-        headers: { cookie: `sb_access=tok; csrf=${validCsrf}` },
+        headers: {
+          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
+        },
         query: { game: 'vang-vong', slot: '0' },
         body: { data: { level: 1 }, version: 0 },
       })
@@ -1294,7 +1725,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       const bigReq = createMockReq({
         method: 'PUT',
         headers: {
-          cookie: `sb_access=tok; csrf=${validCsrf}`,
+          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
           'x-csrf-token': validCsrf,
         },
         query: { game: 'vang-vong', slot: '0' },
@@ -1335,7 +1766,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
           method: 'GET',
           headers: {
             origin: 'https://vang-vong-su-viet.yundev.space',
-            cookie: 'sb_access=tok',
+            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}`,
           },
           query: { game: 'vang-vong', slot: '0' },
         }),
@@ -1368,7 +1799,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
           headers: {
             'x-forwarded-for': '203.0.113.50',
             'content-length': '70001',
-            cookie: `sb_access=tok; csrf=${validCsrf}`,
+            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
             'x-csrf-token': validCsrf,
           },
           query: { game: 'vang-vong', slot: '0' },
@@ -1393,7 +1824,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
           method: 'PUT',
           headers: {
             'x-forwarded-for': '203.0.113.51',
-            cookie: `sb_access=tok; csrf=${validCsrf}`,
+            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
             'x-csrf-token': validCsrf,
           },
           query: { game: 'vang-vong', slot: '0' },
@@ -1413,7 +1844,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
           method: 'PUT',
           headers: {
             'x-forwarded-for': '203.0.113.52',
-            cookie: `sb_access=tok; csrf=${validCsrf}`,
+            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
             'x-csrf-token': validCsrf,
           },
           query: { game: 'vang-vong', slot: '0' },

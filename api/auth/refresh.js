@@ -2,9 +2,11 @@ import {
   REFRESH_MAX_AGE,
   applyCors,
   buildUserPayload,
+  clearSessionCookies,
   computeAccessMaxAge,
   generateCsrfToken,
   getHeader,
+  isSessionPastAbsoluteCap,
   isValidCookieToken,
   parseCookies,
   serializeCookie,
@@ -96,11 +98,7 @@ export default async function handler(req, res) {
 
   if (response.status === 400) {
     if (await isRevokedRefreshResponse(response)) {
-      res.setHeader('Set-Cookie', [
-        serializeCookie('sb_access', '', { httpOnly: true, maxAge: 0 }),
-        serializeCookie('sb_refresh', '', { httpOnly: true, maxAge: 0 }),
-        serializeCookie('csrf', '', { httpOnly: false, maxAge: 0 }),
-      ]);
+      res.setHeader('Set-Cookie', clearSessionCookies());
       return res.status(401).json({ ok: false, error: 'refresh_failed' });
     }
     return res.status(502).json({ ok: false, error: 'auth_upstream_error' });
@@ -122,6 +120,11 @@ export default async function handler(req, res) {
 
   if (!isValidCookieToken(newAccessToken) || !isValidCookieToken(newRefreshToken)) {
     return res.status(502).json({ ok: false, error: 'auth_upstream_error' });
+  }
+
+  if (isSessionPastAbsoluteCap(newAccessToken)) {
+    res.setHeader('Set-Cookie', clearSessionCookies());
+    return res.status(401).json({ ok: false, error: 'session_expired' });
   }
 
   let user = null;

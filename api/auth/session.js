@@ -5,6 +5,7 @@ import {
   computeAccessMaxAge,
   generateCsrfToken,
   getHeader,
+  isSessionPastAbsoluteCap,
   isValidCookieToken,
   serializeCookie,
   shouldAllowDevOrigins,
@@ -64,6 +65,10 @@ export default async function handler(req, res) {
 
   if (verification.status !== 'ok') {
     return res.status(401).json({ ok: false, error: 'invalid_token' });
+  }
+
+  if (isSessionPastAbsoluteCap(accessToken)) {
+    return res.status(401).json({ ok: false, error: 'session_expired' });
   }
 
   const accessMaxAge = computeAccessMaxAge(accessToken);

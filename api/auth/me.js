@@ -1,6 +1,7 @@
 import {
   applyCors,
   getHeader,
+  isSessionPastAbsoluteCap,
   isValidCookieToken,
   parseCookies,
   validateSupabaseAccessToken,
@@ -44,6 +45,10 @@ export default async function handler(req, res) {
 
   if (verification.status !== 'ok') {
     return res.status(401).json({ ok: false });
+  }
+
+  if (isSessionPastAbsoluteCap(accessToken)) {
+    return res.status(401).json({ ok: false, error: 'session_expired' });
   }
 
   return res.status(200).json({

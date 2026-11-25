@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import {
   applyCors,
   getHeader,
+  isSessionPastAbsoluteCap,
   isValidCookieToken,
   parseCookies,
   parseJsonBody,
@@ -99,6 +100,9 @@ export default async function handler(req, res) {
     return res.status(502).json({ ok: false, error: 'auth_upstream_error' });
   }
   if (verification.status !== 'ok') {
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+  if (isSessionPastAbsoluteCap(accessToken)) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 
