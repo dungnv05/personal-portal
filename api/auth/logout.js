@@ -5,6 +5,7 @@ import {
   serializeCookie,
   timingSafeEqualStrings,
 } from './_helpers.js';
+import { rateLimit } from './_ratelimit.js';
 
 /**
  * POST /api/auth/logout
@@ -22,6 +23,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, OPTIONS');
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+  }
+
+  if (await rateLimit(req, res, { bucket: 'logout', limit: 30, windowSec: 60 })) {
+    return;
   }
 
   const cookies = parseCookies(getHeader(req, 'cookie'));

@@ -1,3 +1,5 @@
+import { isAllowedHost } from '../../shared/allowed-origins.js'
+
 export type YunHeaderApp = 'portal' | 'tinh-luong' | 'brse' | 'vang-vong' | 'ivf'
 export type YunHeaderVariant = 'bar' | 'overlay'
 export type YunHeaderState = 'loading' | 'signed-out' | 'signed-in' | 'expired' | 'error'
@@ -548,7 +550,7 @@ export function isAllowedAuthOrigin(
     if (url.port !== '') {
       return false
     }
-    return host === 'yundev.space' || host.endsWith('.yundev.space')
+    return isAllowedHost(host)
   }
   if (url.protocol === 'http:') {
     if (!opts.allowLocalhost) {
@@ -733,6 +735,7 @@ export class YunHeader extends HTMLElement {
   private _loggingOut = false
   private _logoutError = false
   private _abortController: AbortController | null = null
+  private _refreshPromise: Promise<boolean> | null = null
   private _loadingTimer: ReturnType<typeof setTimeout> | null = null
   private _lastAnnouncedAuthKey: string | null = null
   private _rendered = false
@@ -869,7 +872,7 @@ export class YunHeader extends HTMLElement {
     this._loadingTimer = timerId
 
     try {
-      const response = await fetch(`${this.authBase}/api/auth/me`, {
+      let response = await fetch(`${this.authBase}/api/auth/me`, {
         method: 'GET',
         credentials: 'include',
         signal: controller.signal,
@@ -877,6 +880,23 @@ export class YunHeader extends HTMLElement {
 
       if (controller.signal.aborted) {
         return
+      }
+
+      if (response.status === 401 && readCsrfCookie()) {
+        const refreshed = await this._tryRefreshSession()
+        if (controller.signal.aborted) {
+          return
+        }
+        if (refreshed) {
+          response = await fetch(`${this.authBase}/api/auth/me`, {
+            method: 'GET',
+            credentials: 'include',
+            signal: controller.signal,
+          })
+          if (controller.signal.aborted) {
+            return
+          }
+        }
       }
 
       if (response.status === 200) {
@@ -943,6 +963,39 @@ export class YunHeader extends HTMLElement {
 
     this._renderAccountRegions()
     this._dispatchAuthChange()
+  }
+
+  private async _tryRefreshSession(): Promise<boolean> {
+    const csrfToken = readCsrfCookie()
+    if (!csrfToken) {
+      return false
+    }
+    if (this._refreshPromise) {
+      return this._refreshPromise
+    }
+
+    this._refreshPromise = (async () => {
+      try {
+        const freshCsrf = readCsrfCookie()
+        if (!freshCsrf) {
+          return false
+        }
+        const response = await fetch(`${this.authBase}/api/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'x-csrf-token': freshCsrf,
+          },
+        })
+        return response.status === 200
+      } catch {
+        return false
+      } finally {
+        this._refreshPromise = null
+      }
+    })()
+
+    return this._refreshPromise
   }
 
   private _applySignedOutOrExpired(wasSignedIn: boolean): void {

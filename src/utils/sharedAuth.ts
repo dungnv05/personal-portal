@@ -11,6 +11,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 export type SessionUser = {
   id: string
   email: string | null
+  display_name?: string | null
+  avatar_url?: string | null
 }
 
 export type SignInResult = {
@@ -66,9 +68,13 @@ function extractSessionUser(payload: unknown): SessionUser | null {
     return null
   }
   const email = typeof candidate.email === 'string' ? candidate.email : null
+  const displayName = typeof candidate.display_name === 'string' ? candidate.display_name : null
+  const avatarUrl = typeof candidate.avatar_url === 'string' ? candidate.avatar_url : null
   return {
     id: candidate.id,
     email,
+    display_name: displayName,
+    avatar_url: avatarUrl,
   }
 }
 
@@ -284,19 +290,74 @@ export async function signInWithEmail(
   }
 }
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+let refreshInFlight: Promise<boolean> | null = null
+
+async function tryRefreshSession(): Promise<boolean> {
   if (typeof fetch !== 'function') {
-    return null
+    return false
+  }
+  const csrfToken = getCsrfToken()
+  if (!csrfToken) {
+    return false
+  }
+  if (refreshInFlight) {
+    return refreshInFlight
   }
 
-  let response: Response
+  refreshInFlight = (async () => {
+    try {
+      const freshCsrf = getCsrfToken()
+      if (!freshCsrf) {
+        return false
+      }
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'x-csrf-token': freshCsrf,
+        },
+      })
+      return response.status === 200
+    } catch {
+      return false
+    } finally {
+      refreshInFlight = null
+    }
+  })()
+
+  return refreshInFlight
+}
+
+async function fetchMe(): Promise<Response | null> {
   try {
-    response = await fetch('/api/auth/me', {
+    return await fetch('/api/auth/me', {
       method: 'GET',
       credentials: 'include',
     })
   } catch {
     return null
+  }
+}
+
+export async function getSessionUser(): Promise<SessionUser | null> {
+  if (typeof fetch !== 'function') {
+    return null
+  }
+
+  let response = await fetchMe()
+  if (!response) {
+    return null
+  }
+
+  if (response.status === 401 && getCsrfToken()) {
+    const refreshed = await tryRefreshSession()
+    if (!refreshed) {
+      return null
+    }
+    response = await fetchMe()
+    if (!response) {
+      return null
+    }
   }
 
   if (response.status !== 200) {
@@ -311,6 +372,67 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
 
   return extractSessionUser(payload)
+}
+
+export type UpdateProfileResult = {
+  user: SessionUser | null
+  error: Error | null
+}
+
+export async function updateDisplayName(name: string): Promise<UpdateProfileResult> {
+  if (typeof fetch !== 'function') {
+    return { user: null, error: new Error('Fetch unavailable.') }
+  }
+
+  const csrfToken = getCsrfToken()
+  let response: Response
+  try {
+    response = await fetch('/api/auth/profile', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+      },
+      body: JSON.stringify({ display_name: name }),
+    })
+  } catch (err: unknown) {
+    return {
+      user: null,
+      error: toError(err, 'Failed to update profile.'),
+    }
+  }
+
+  if (response.status !== 200) {
+    const errorCode = await readErrorCode(response)
+    const message = errorCode
+      ? `Failed to update profile (${response.status}: ${errorCode}).`
+      : `Failed to update profile (${response.status}).`
+    return {
+      user: null,
+      error: new Error(message),
+    }
+  }
+
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    return {
+      user: null,
+      error: new Error('Invalid profile response.'),
+    }
+  }
+
+  const user = extractSessionUser(payload)
+  if (!user) {
+    return {
+      user: null,
+      error: new Error('Invalid profile response.'),
+    }
+  }
+
+  return { user, error: null }
 }
 
 export async function logout(): Promise<LogoutResult> {

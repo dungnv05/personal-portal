@@ -220,7 +220,12 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
     const result = await auth.signInWithEmail('yun@yundev.space', 'secret-password')
 
     expect(result.error).toBeNull()
-    expect(result.data.user).toEqual({ id: 'user-123', email: 'yun@yundev.space' })
+    expect(result.data.user).toEqual({
+      id: 'user-123',
+      email: 'yun@yundev.space',
+      display_name: null,
+      avatar_url: null,
+    })
     expect(mockState.signInWithPassword).toHaveBeenCalledWith({
       email: 'yun@yundev.space',
       password: 'secret-password',
@@ -355,7 +360,12 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
 
     const user = await auth.getSessionUser()
 
-    expect(user).toEqual({ id: 'user-99', email: 'cookie@yundev.space' })
+    expect(user).toEqual({
+      id: 'user-99',
+      email: 'cookie@yundev.space',
+      display_name: null,
+      avatar_url: null,
+    })
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', {
       method: 'GET',
       credentials: 'include',
@@ -477,7 +487,12 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
     expect(signInRes.error).toBeNull()
 
     const sessionUser = await auth.getSessionUser()
-    expect(sessionUser).toEqual({ id: 'user-123', email: 'yun@yundev.space' })
+    expect(sessionUser).toEqual({
+      id: 'user-123',
+      email: 'yun@yundev.space',
+      display_name: null,
+      avatar_url: null,
+    })
 
     const logoutRes = await auth.logout()
     expect(logoutRes.error).toBeNull()

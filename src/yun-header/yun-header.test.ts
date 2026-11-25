@@ -700,4 +700,52 @@ describe('<yun-header>', () => {
     expect(expiredNotice?.hasAttribute('hidden')).toBe(true)
     expect(logoutNotice?.hasAttribute('hidden')).toBe(true)
   })
+
+  it('refreshes once on 401 when csrf cookie exists, single-flight per element, and never loops', async () => {
+    document.cookie = 'csrf=csrf-refresh-tok; path=/'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-refreshed', email: 'refreshed@yundev.space', display_name: 'Refreshed' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-refreshed', email: 'refreshed@yundev.space', display_name: 'Refreshed' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('auth-base', 'https://www.yundev.space')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    expect(el.state).toBe('signed-in')
+    expect(el.user?.id).toBe('user-refreshed')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://www.yundev.space/api/auth/refresh',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'x-csrf-token': 'csrf-refresh-tok' },
+      }),
+    )
+
+    // If retried /me still returns 401, never loops
+    fetchMock.mockReset()
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
+      .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'refresh_failed' }, 401))
+
+    await el.refresh()
+    expect(el.state).toBe('expired')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

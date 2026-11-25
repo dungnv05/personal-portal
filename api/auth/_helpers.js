@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import crypto from 'node:crypto';
+import { DEV_ORIGINS, PROD_ORIGINS, isAllowedOrigin } from '../../shared/allowed-origins.js';
 
 /**
  * Shared helpers for /api/auth/* Vercel serverless functions.
@@ -14,14 +15,10 @@ export const COOKIE_PATH = '/';
 export const ACCESS_FALLBACK_MAX_AGE = 3600;
 export const REFRESH_MAX_AGE = 2592000;
 
-export const ALLOWED_ORIGINS = [
-  'https://yundev.space',
-  'https://www.yundev.space',
-  'https://tinh-luong.yundev.space',
-  'https://brse.yundev.space',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-];
+export const ALLOWED_ORIGINS =
+  process.env.VERCEL_ENV !== 'production'
+    ? [...PROD_ORIGINS, ...DEV_ORIGINS]
+    : [...PROD_ORIGINS];
 
 const DEFAULT_ALLOWED_ORIGIN = 'https://yundev.space';
 const ALLOWED_HEADERS = 'content-type, x-csrf-token';
@@ -46,7 +43,8 @@ export function getHeader(req, targetName) {
 
 export function applyCors(req, res, allowedMethods) {
   const origin = getHeader(req, 'origin');
-  if (ALLOWED_ORIGINS.includes(origin)) {
+  const allowDev = process.env.VERCEL_ENV !== 'production';
+  if (isAllowedOrigin(origin, { allowDev })) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
     res.setHeader('Access-Control-Allow-Origin', DEFAULT_ALLOWED_ORIGIN);
@@ -177,6 +175,64 @@ export function timingSafeEqualStrings(a, b) {
   return crypto.timingSafeEqual(digestA, digestB) && bufA.length === bufB.length;
 }
 
+export function hasControlChars(value) {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function sanitizeDisplayName(value, maxLength = 60) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > maxLength || hasControlChars(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+export function sanitizeAvatarUrl(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || hasControlChars(trimmed)) {
+    return null;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+export function buildUserPayload(rawUser) {
+  const metadata =
+    rawUser?.user_metadata && typeof rawUser.user_metadata === 'object'
+      ? rawUser.user_metadata
+      : null;
+  const displayName =
+    sanitizeDisplayName(metadata?.full_name) ??
+    sanitizeDisplayName(metadata?.display_name) ??
+    null;
+  const avatarUrl =
+    sanitizeAvatarUrl(metadata?.avatar_url) ??
+    sanitizeAvatarUrl(rawUser?.avatar_url) ??
+    null;
+  return {
+    id: rawUser.id,
+    email: typeof rawUser.email === 'string' ? rawUser.email : null,
+    display_name: displayName,
+    avatar_url: avatarUrl,
+  };
+}
+
 export async function validateSupabaseAccessToken(accessToken) {
   const supabaseUrl = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
   const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || '').trim();
@@ -215,9 +271,6 @@ export async function validateSupabaseAccessToken(accessToken) {
 
   return {
     status: 'ok',
-    user: {
-      id: payload.id,
-      email: typeof payload.email === 'string' ? payload.email : null,
-    },
+    user: buildUserPayload(payload),
   };
 }

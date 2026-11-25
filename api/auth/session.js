@@ -8,6 +8,7 @@ import {
   serializeCookie,
   validateSupabaseAccessToken,
 } from './_helpers.js';
+import { rateLimit } from './_ratelimit.js';
 
 /**
  * POST /api/auth/session
@@ -25,6 +26,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, OPTIONS');
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+  }
+
+  if (await rateLimit(req, res, { bucket: 'session', limit: 10, windowSec: 60 })) {
+    return;
   }
 
   const body = parseJsonBody(req.body);
@@ -60,9 +65,6 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     ok: true,
-    user: {
-      id: verification.user.id,
-      email: verification.user.email,
-    },
+    user: verification.user,
   });
 }

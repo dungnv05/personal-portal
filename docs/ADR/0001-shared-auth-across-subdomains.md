@@ -92,11 +92,16 @@ Shipped on `2026-11-24`, implementing the target cookie-based migration describe
 
 ### Endpoints
 
-- `api/auth/session.js` (`POST /api/auth/session`): validates `{ access_token, refresh_token }` by calling Supabase `/auth/v1/user` and sets the shared session cookies.
-- `api/auth/me.js` (`GET /api/auth/me`): reads and validates the `sb_access` cookie against Supabase `/auth/v1/user` without modifying cookies, returning `{ ok: true, user: { id, email } }`.
+- `api/auth/session.js` (`POST /api/auth/session`): validates `{ access_token, refresh_token }` by calling Supabase `/auth/v1/user` and sets the shared session cookies, returning `{ ok: true, user: { id, email, display_name, avatar_url } }`.
+- `api/auth/me.js` (`GET /api/auth/me`): reads and validates the `sb_access` cookie against Supabase `/auth/v1/user` without modifying cookies, returning `{ ok: true, user: { id, email, display_name, avatar_url } }`.
+- `api/auth/refresh.js` (`POST /api/auth/refresh`): verifies CSRF double-submit token and `sb_refresh` cookie, rotates the refresh token via Supabase `/auth/v1/token?grant_type=refresh_token`, and sets rotated `sb_access`, `sb_refresh`, and `csrf` cookies (clearing all three on Supabase `400`/`401`).
 - `api/auth/logout.js` (`POST /api/auth/logout`): verifies the CSRF double-submit token and clears all shared auth cookies (`Max-Age=0`).
-- `api/auth/_helpers.js`: shared CORS allowlist (`ALLOWED_ORIGINS`), cookie parsing/serialization, token validation, and constant-time comparison helpers.
-- `api/config.js`: retained for serving Supabase public runtime configuration (`supabaseUrl`, `supabaseAnonKey`) when build-time values are placeholders.
+- `api/auth/profile.js` (`POST /api/auth/profile`): verifies CSRF double-submit token and `sb_access` cookie, validates `display_name` (1–50 chars, no control chars), and updates `user_metadata.full_name` via Supabase `PUT /auth/v1/user`.
+- `api/auth/_helpers.js`: shared CORS allowlist (`ALLOWED_ORIGINS` from `shared/allowed-origins.js`, including `DEV_ORIGINS` only when `VERCEL_ENV !== 'production'`), cookie parsing/serialization, token/metadata validation, and constant-time comparison helpers.
+- `api/auth/_ratelimit.js`: fixed-window rate limiter applied after CORS/OPTIONS on all `/api/auth/*` handlers, `api/config.js`, and `api/save.js` (Upstash Redis REST when both `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set, with in-memory fallback).
+- `shared/allowed-origins.js`: canonical 6-host allowlist (`yundev.space`, `www.yundev.space`, `tinh-luong.yundev.space`, `brse.yundev.space`, `vang-vong-su-viet.yundev.space`, `ivf-journey.yundev.space`) shared by API CORS, `api/config.js`, `nextUrl.ts`, `nextParam.ts`, and `<yun-header>` (no wildcard `*.yundev.space`).
+- `api/config.js`: retained for serving Supabase public runtime configuration (`supabaseUrl`, `supabaseAnonKey`) using the shared `applyCors` + `rateLimit`.
+- `api/save.js` (`GET`/`PUT /api/save`): cloud-save skeleton gated by `CLOUD_SAVE_ENABLED=true`, using user `sb_access` JWT + Supabase RLS (`supabase/migrations/20261125000000_game_saves.sql`), CSRF on `PUT`, per-user rate limits, and a 64 KB `data` payload cap.
 
 ### Cookie Names and Attributes
 
@@ -114,8 +119,8 @@ Double-submit cookie pattern: `/api/auth/session` issues the JS-readable `csrf` 
 
 ### Residual Risks
 
-- Refresh token rotation is not implemented (`sb_refresh` is stored as an HttpOnly cookie, but no server-side refresh/rotation endpoint exists yet).
-- No rate limit is enforced on `/api/auth/*` endpoints.
+- The in-memory rate limiter is per-instance only (not shared across serverless instances) until Upstash Redis (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`) or a Vercel Firewall/WAF rate-limit rule is configured.
+- Cloud save (`/api/save`) is disabled by default (`503 cloud_save_disabled`) until the `game_saves` migration (`supabase/migrations/20261125000000_game_saves.sql`) is applied and `CLOUD_SAVE_ENABLED=true` is set.
 
 ## Follow-ups
 

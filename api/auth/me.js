@@ -5,6 +5,7 @@ import {
   parseCookies,
   validateSupabaseAccessToken,
 } from './_helpers.js';
+import { rateLimit } from './_ratelimit.js';
 
 /**
  * GET /api/auth/me
@@ -22,6 +23,10 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET, OPTIONS');
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+  }
+
+  if (await rateLimit(req, res, { bucket: 'me', limit: 120, windowSec: 60 })) {
+    return;
   }
 
   const cookies = parseCookies(getHeader(req, 'cookie'));
@@ -43,9 +48,6 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     ok: true,
-    user: {
-      id: verification.user.id,
-      email: verification.user.email,
-    },
+    user: verification.user,
   });
 }

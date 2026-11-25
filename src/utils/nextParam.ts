@@ -1,5 +1,5 @@
-const ALLOWED_APEX_HOST = 'yundev.space'
-const ALLOWED_SUBDOMAIN_SUFFIX = '.yundev.space'
+import { isAllowedHost } from '../../shared/allowed-origins.js'
+
 const HTTPS_PREFIX_PATTERN = /^https:\/\//i
 const SAME_ORIGIN_BASE = 'https://yundev.space'
 
@@ -11,23 +11,6 @@ function hasControlChars(value: string): boolean {
     }
   }
   return false
-}
-
-function isAllowedHost(host: string): boolean {
-  const normalized = host.toLowerCase()
-  if (normalized === ALLOWED_APEX_HOST) {
-    return true
-  }
-  if (!normalized.endsWith(ALLOWED_SUBDOMAIN_SUFFIX)) {
-    return false
-  }
-  if (normalized.length <= ALLOWED_SUBDOMAIN_SUFFIX.length) {
-    return false
-  }
-  if (normalized.startsWith('.') || normalized.includes('..')) {
-    return false
-  }
-  return true
 }
 
 function readNextParam(search: string): string | null {

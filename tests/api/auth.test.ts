@@ -3,11 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import sessionHandler from '../../api/auth/session.js'
 import meHandler from '../../api/auth/me.js'
 import logoutHandler from '../../api/auth/logout.js'
+import refreshHandler from '../../api/auth/refresh.js'
+import profileHandler from '../../api/auth/profile.js'
+import saveHandler from '../../api/save.js'
+import configHandler from '../../api/config.js'
+import { resetMemoryRateLimitStore } from '../../api/auth/_ratelimit.js'
 
 type MockRequest = {
   method: string
   headers: Record<string, string | undefined>
   body?: unknown
+  query?: Record<string, string | undefined>
+  url?: string
 }
 
 type MockResponse = {
@@ -72,10 +79,19 @@ function createFakeJwt(payload: Record<string, unknown>): string {
 describe('serverless auth endpoints (/api/auth/*)', () => {
   const originalSupabaseUrl = process.env.SUPABASE_URL
   const originalSupabaseAnonKey = process.env.SUPABASE_ANON_KEY
+  const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
+  const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  const originalCloudSave = process.env.CLOUD_SAVE_ENABLED
+  const originalVercelEnv = process.env.VERCEL_ENV
 
   beforeEach(() => {
+    resetMemoryRateLimitStore()
     process.env.SUPABASE_URL = TEST_SUPABASE_URL
     process.env.SUPABASE_ANON_KEY = TEST_SUPABASE_ANON_KEY
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.CLOUD_SAVE_ENABLED
+    delete process.env.VERCEL_ENV
   })
 
   afterEach(() => {
@@ -93,6 +109,30 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       delete process.env.SUPABASE_ANON_KEY
     } else {
       process.env.SUPABASE_ANON_KEY = originalSupabaseAnonKey
+    }
+
+    if (originalUpstashUrl === undefined) {
+      delete process.env.UPSTASH_REDIS_REST_URL
+    } else {
+      process.env.UPSTASH_REDIS_REST_URL = originalUpstashUrl
+    }
+
+    if (originalUpstashToken === undefined) {
+      delete process.env.UPSTASH_REDIS_REST_TOKEN
+    } else {
+      process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken
+    }
+
+    if (originalCloudSave === undefined) {
+      delete process.env.CLOUD_SAVE_ENABLED
+    } else {
+      process.env.CLOUD_SAVE_ENABLED = originalCloudSave
+    }
+
+    if (originalVercelEnv === undefined) {
+      delete process.env.VERCEL_ENV
+    } else {
+      process.env.VERCEL_ENV = originalVercelEnv
     }
   })
 
@@ -146,6 +186,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         user: {
           id: 'user-123',
           email: 'yun@yundev.space',
+          display_name: null,
+          avatar_url: null,
         },
       })
 
@@ -296,6 +338,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         user: {
           id: 'user-789',
           email: 'me@yundev.space',
+          display_name: null,
+          avatar_url: null,
         },
       })
       expect(res.getHeader('set-cookie')).toBeUndefined()
@@ -474,6 +518,458 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       expect(res.statusCode).toBe(204)
       expect(res.getHeader('access-control-allow-origin')).toBe('https://yundev.space')
       expect(res.getHeader('access-control-allow-credentials')).toBe('true')
+    })
+
+    it('rejects dev origins when VERCEL_ENV is production and rejects vault/evil subdomains', async () => {
+      process.env.VERCEL_ENV = 'production'
+
+      for (const origin of [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'https://vault.yundev.space',
+        'https://evil.yundev.space',
+        'https://a.b.yundev.space',
+      ]) {
+        const req = createMockReq({ method: 'OPTIONS', headers: { origin } })
+        const res = createMockRes()
+        await configHandler(req, res)
+        expect(res.statusCode).toBe(204)
+        expect(res.getHeader('access-control-allow-origin')).toBe('https://yundev.space')
+        expect(res.getHeader('vary')).toBe('Origin')
+      }
+
+      const okReq = createMockReq({
+        method: 'OPTIONS',
+        headers: { origin: 'https://ivf-journey.yundev.space' },
+      })
+      const okRes = createMockRes()
+      await configHandler(okReq, okRes)
+      expect(okRes.getHeader('access-control-allow-origin')).toBe('https://ivf-journey.yundev.space')
+    })
+  })
+
+  describe('POST /api/auth/refresh', () => {
+    const validCsrf = 'c'.repeat(64)
+
+    it('rotates tokens, sets 3 cookies, and returns sanitized user on 200', async () => {
+      vi.useFakeTimers()
+      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
+      vi.setSystemTime(fixedNowMs)
+      const nowSeconds = Math.floor(fixedNowMs / 1000)
+
+      const newAccess = createFakeJwt({ sub: 'user-1', exp: nowSeconds + 3600 })
+      const newRefresh = 'rotated-refresh-token-xyz'
+
+      const fetchMock = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              access_token: newAccess,
+              refresh_token: newRefresh,
+              user: {
+                id: 'user-1',
+                email: 'yun@yundev.space',
+                user_metadata: {
+                  full_name: '  Yun Dev  ',
+                  avatar_url: 'https://cdn.example.com/a.png',
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=old-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+
+      await refreshHandler(req, res)
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${TEST_SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: TEST_SUPABASE_ANON_KEY,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ refresh_token: 'old-refresh' }),
+        },
+      )
+      expect(res.statusCode).toBe(200)
+      expect(res.body).toEqual({
+        ok: true,
+        user: {
+          id: 'user-1',
+          email: 'yun@yundev.space',
+          display_name: 'Yun Dev',
+          avatar_url: 'https://cdn.example.com/a.png',
+        },
+      })
+
+      const cookies = res.getHeader('set-cookie') as string[]
+      expect(cookies).toHaveLength(3)
+      expect(cookies[0]).toBe(
+        `sb_access=${newAccess}; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=3600`,
+      )
+      expect(cookies[1]).toBe(
+        `sb_refresh=${newRefresh}; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=2592000`,
+      )
+      expect(cookies[2]).toMatch(
+        /^csrf=[0-9a-f]{64}; Secure; SameSite=Lax; Path=\/; Domain=\.yundev\.space; Max-Age=2592000$/,
+      )
+    })
+
+    it('returns 403 csrf_mismatch when CSRF token does not match', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=old-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': 'wrong',
+        },
+      })
+      const res = createMockRes()
+
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(403)
+      expect(res.body).toEqual({ ok: false, error: 'csrf_mismatch' })
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('clears all three cookies and returns 401 refresh_failed when Supabase returns 400', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }),
+          ),
+        ),
+      )
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=revoked-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(401)
+      expect(res.body).toEqual({ ok: false, error: 'refresh_failed' })
+      expect(res.getHeader('set-cookie')).toEqual([
+        'sb_access=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=0',
+        'sb_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=0',
+        'csrf=; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=0',
+      ])
+    })
+
+    it('returns 502 and leaves cookies untouched on network error', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('network down'))))
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=old-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(502)
+      expect(res.body).toEqual({ ok: false, error: 'auth_upstream_error' })
+      expect(res.getHeader('set-cookie')).toBeUndefined()
+    })
+  })
+
+  describe('Rate limiting', () => {
+    it('returns 429 with Retry-After after exceeding per-IP limit', async () => {
+      vi.stubGlobal('fetch', vi.fn())
+
+      for (let i = 0; i < 10; i += 1) {
+        const req = createMockReq({
+          method: 'POST',
+          headers: { 'x-forwarded-for': '203.0.113.9' },
+          body: {},
+        })
+        const res = createMockRes()
+        await sessionHandler(req, res)
+        expect(res.statusCode).toBe(401)
+      }
+
+      const blockedReq = createMockReq({
+        method: 'POST',
+        headers: { 'x-forwarded-for': '203.0.113.9' },
+        body: {},
+      })
+      const blockedRes = createMockRes()
+      await sessionHandler(blockedReq, blockedRes)
+
+      expect(blockedRes.statusCode).toBe(429)
+      expect(blockedRes.body).toEqual({ ok: false, error: 'rate_limited' })
+      expect(blockedRes.getHeader('retry-after')).toBeDefined()
+    })
+
+    it('uses Upstash REST when env vars are set and falls back to memory on Upstash error', async () => {
+      process.env.UPSTASH_REDIS_REST_URL = 'https://redis.upstash.test'
+      process.env.UPSTASH_REDIS_REST_TOKEN = 'upstash-test-token'
+
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([{ result: 31 }, { result: 1 }]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+        .mockRejectedValueOnce(new TypeError('Upstash unreachable'))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const blockedReq = createMockReq({
+        method: 'POST',
+        headers: { 'x-real-ip': '198.51.100.2' },
+      })
+      const blockedRes = createMockRes()
+      await logoutHandler(blockedReq, blockedRes)
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://redis.upstash.test/pipeline',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer upstash-test-token',
+          }),
+        }),
+      )
+      expect(blockedRes.statusCode).toBe(429)
+      expect(blockedRes.body).toEqual({ ok: false, error: 'rate_limited' })
+
+      const fallbackReq = createMockReq({
+        method: 'POST',
+        headers: { 'x-real-ip': '198.51.100.2' },
+      })
+      const fallbackRes = createMockRes()
+      await logoutHandler(fallbackReq, fallbackRes)
+
+      expect(fallbackRes.statusCode).toBe(403)
+      expect(fallbackRes.body).toEqual({ ok: false, error: 'csrf_mismatch' })
+    })
+  })
+
+  describe('POST /api/auth/profile', () => {
+    const validCsrf = 'd'.repeat(64)
+
+    it('rejects empty, overlong, or control-char display_name with 400', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      for (const badName of ['   ', 'a'.repeat(51), 'bad\nname', 123]) {
+        const req = createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://www.yundev.space',
+            cookie: `sb_access=valid-access; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+          body: { display_name: badName },
+        })
+        const res = createMockRes()
+        await profileHandler(req, res)
+        expect(res.statusCode).toBe(400)
+        expect(res.body).toEqual({ ok: false, error: 'invalid_display_name' })
+      }
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('updates user_metadata.full_name via Supabase and returns updated user', async () => {
+      const fetchMock = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'user-99',
+              email: 'yun@yundev.space',
+              user_metadata: { full_name: 'Yun Nguyen' },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_access=valid-access; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+        body: { display_name: '  Yun Nguyen  ' },
+      })
+      const res = createMockRes()
+
+      await profileHandler(req, res)
+
+      expect(fetchMock).toHaveBeenCalledWith(`${TEST_SUPABASE_URL}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          apikey: TEST_SUPABASE_ANON_KEY,
+          Authorization: 'Bearer valid-access',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: { full_name: 'Yun Nguyen' } }),
+      })
+      expect(res.statusCode).toBe(200)
+      expect(res.body).toEqual({
+        ok: true,
+        user: {
+          id: 'user-99',
+          email: 'yun@yundev.space',
+          display_name: 'Yun Nguyen',
+          avatar_url: null,
+        },
+      })
+    })
+  })
+
+  describe('GET/PUT /api/save', () => {
+    const validCsrf = 'e'.repeat(64)
+
+    it('returns 503 cloud_save_disabled when CLOUD_SAVE_ENABLED is not true', async () => {
+      const req = createMockReq({
+        method: 'GET',
+        headers: { origin: 'https://vang-vong-su-viet.yundev.space' },
+        query: { game: 'vang-vong', slot: '0' },
+      })
+      const res = createMockRes()
+
+      await saveHandler(req, res)
+
+      expect(res.statusCode).toBe(503)
+      expect(res.body).toEqual({ ok: false, error: 'cloud_save_disabled' })
+    })
+
+    it('supports GET and PUT happy paths, and rejects bad slot, oversize data, and missing CSRF', async () => {
+      process.env.CLOUD_SAVE_ENABLED = 'true'
+
+      const fetchMock = vi
+        .fn()
+        // 1. GET /auth/v1/user
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
+        )
+        // 2. GET /rest/v1/game_saves
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify([{ data: { level: 5 }, version: 2, updated_at: '2026-11-25T00:00:00Z' }]),
+            { status: 200 },
+          ),
+        )
+        // 3. GET /auth/v1/user for PUT
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
+        )
+        // 4. POST /rest/v1/game_saves
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([{ updated_at: '2026-11-25T01:00:00Z' }]), { status: 201 }),
+        )
+        // 5..7. auth checks for error cases
+        .mockImplementation(
+          async () =>
+            new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), {
+              status: 200,
+            }),
+        )
+      vi.stubGlobal('fetch', fetchMock)
+
+      // GET happy path
+      const getReq = createMockReq({
+        method: 'GET',
+        headers: {
+          origin: 'https://vang-vong-su-viet.yundev.space',
+          cookie: `sb_access=tok; csrf=${validCsrf}`,
+        },
+        query: { game: 'vang-vong', slot: '1' },
+      })
+      const getRes = createMockRes()
+      await saveHandler(getReq, getRes)
+      expect(getRes.statusCode).toBe(200)
+      expect(getRes.body).toEqual({
+        ok: true,
+        save: { data: { level: 5 }, version: 2, updated_at: '2026-11-25T00:00:00Z' },
+      })
+
+      // PUT happy path
+      const putReq = createMockReq({
+        method: 'PUT',
+        headers: {
+          origin: 'https://vang-vong-su-viet.yundev.space',
+          cookie: `sb_access=tok; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+        query: { game: 'vang-vong', slot: '1' },
+        body: { data: { level: 6 }, version: 3 },
+      })
+      const putRes = createMockRes()
+      await saveHandler(putReq, putRes)
+      expect(putRes.statusCode).toBe(200)
+      expect(putRes.body).toEqual({ ok: true, updated_at: '2026-11-25T01:00:00Z' })
+
+      // Bad slot -> 400
+      const badSlotReq = createMockReq({
+        method: 'GET',
+        headers: { cookie: `sb_access=tok` },
+        query: { game: 'vang-vong', slot: '3' },
+      })
+      const badSlotRes = createMockRes()
+      await saveHandler(badSlotReq, badSlotRes)
+      expect(badSlotRes.statusCode).toBe(400)
+      expect(badSlotRes.body).toEqual({ ok: false, error: 'invalid_query' })
+
+      // PUT without CSRF -> 403
+      const noCsrfReq = createMockReq({
+        method: 'PUT',
+        headers: { cookie: `sb_access=tok; csrf=${validCsrf}` },
+        query: { game: 'vang-vong', slot: '0' },
+        body: { data: { level: 1 }, version: 0 },
+      })
+      const noCsrfRes = createMockRes()
+      await saveHandler(noCsrfReq, noCsrfRes)
+      expect(noCsrfRes.statusCode).toBe(403)
+      expect(noCsrfRes.body).toEqual({ ok: false, error: 'csrf_mismatch' })
+
+      // Oversize data -> 413
+      const bigReq = createMockReq({
+        method: 'PUT',
+        headers: {
+          cookie: `sb_access=tok; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+        query: { game: 'vang-vong', slot: '0' },
+        body: { data: { blob: 'x'.repeat(66000) }, version: 1 },
+      })
+      const bigRes = createMockRes()
+      await saveHandler(bigReq, bigRes)
+      expect(bigRes.statusCode).toBe(413)
+      expect(bigRes.body).toEqual({ ok: false, error: 'payload_too_large' })
     })
   })
 })

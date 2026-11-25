@@ -23,6 +23,7 @@ import type { YunHeader, YunHeaderAuthChangeDetail } from './yun-header'
 import { getNextTargetLabel } from './utils/nextParam'
 import { resolveNextUrl } from './utils/nextUrl'
 import { Turnstile } from './components/Turnstile'
+import { ProfilePage } from './components/ProfilePage'
 import { hasTurnstileSiteKey } from './utils/turnstile'
 import './App.css'
 
@@ -156,7 +157,12 @@ function App() {
     const onAuthChange = (event: Event) => {
       const detail = (event as CustomEvent<YunHeaderAuthChangeDetail>).detail
       if (detail?.user) {
-        setCurrentUser({ id: detail.user.id, email: detail.user.email })
+        setCurrentUser({
+          id: detail.user.id,
+          email: detail.user.email,
+          display_name: detail.user.displayName,
+          avatar_url: detail.user.avatarUrl,
+        })
       } else {
         setCurrentUser(null)
       }
@@ -331,28 +337,11 @@ function App() {
 
         <main id="main" className="portal-main">
           {isProfileView && (
-            <section className="cyber-card profile-stub" aria-labelledby="profile-heading">
-              <h2 id="profile-heading" className="section-title">Hồ sơ</h2>
-              {currentUser ? (
-                <div className="profile-stub-body">
-                  <div className="profile-stub-avatar" aria-hidden="true">
-                    {(currentUser.email?.split('@')[0]?.[0] ?? 'U').toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="profile-stub-name">{currentUser.email?.split('@')[0] ?? 'User'}</p>
-                    {currentUser.email && <p className="profile-stub-email">{currentUser.email}</p>}
-                    <p className="profile-stub-note">Trang hồ sơ đầy đủ sẽ có trong bản cập nhật sau.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="profile-stub-body">
-                  <p className="profile-stub-note">Vui lòng đăng nhập để xem hồ sơ của bạn.</p>
-                  <button type="button" className="btn btn-primary" onClick={openSignInModal}>
-                    Đăng nhập
-                  </button>
-                </div>
-              )}
-            </section>
+            <ProfilePage
+              user={currentUser}
+              onOpenSignIn={openSignInModal}
+              onUserUpdated={setCurrentUser}
+            />
           )}
           {/* Hero Section */}
           <section className="hero-section">

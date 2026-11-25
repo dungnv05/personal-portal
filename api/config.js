@@ -1,35 +1,25 @@
-export default function handler(req, res) {
-  // CORS Security: Allow only specific origins
-  const allowedOrigins = [
-    'https://yundev.space',
-    'https://www.yundev.space',
-    'https://tinh-luong.yundev.space',
-    'https://brse.yundev.space',
-    'http://localhost:5173', // Vite local
-    'http://127.0.0.1:5173'
-  ];
-  
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://yundev.space');
+import { applyCors } from './auth/_helpers.js';
+import { rateLimit } from './auth/_ratelimit.js';
+
+export default async function handler(req, res) {
+  if (applyCors(req, res, 'GET, OPTIONS')) {
+    return;
   }
 
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, OPTIONS');
+    return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+  }
 
-  // Handle preflight OPTIONS request
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (await rateLimit(req, res, { bucket: 'config', limit: 60, windowSec: 60 })) {
+    return;
   }
 
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
-  res.status(200).json({
+  return res.status(200).json({
     supabaseUrl,
-    supabaseAnonKey
+    supabaseAnonKey,
   });
 }
