@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { sharedRefresh } from '../shared-auth/refreshCoordinator'
 
 /**
  * Shared authentication client for *.yundev.space backed by HttpOnly cookies.
@@ -291,42 +292,12 @@ export async function signInWithEmail(
   }
 }
 
-let refreshInFlight: Promise<boolean> | null = null
-
 async function tryRefreshSession(): Promise<boolean> {
   if (typeof fetch !== 'function') {
     return false
   }
-  const csrfToken = getCsrfToken()
-  if (!csrfToken) {
-    return false
-  }
-  if (refreshInFlight) {
-    return refreshInFlight
-  }
-
-  refreshInFlight = (async () => {
-    try {
-      const freshCsrf = getCsrfToken()
-      if (!freshCsrf) {
-        return false
-      }
-      const response = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'x-csrf-token': freshCsrf,
-        },
-      })
-      return response.status === 200
-    } catch {
-      return false
-    } finally {
-      refreshInFlight = null
-    }
-  })()
-
-  return refreshInFlight
+  const outcome = await sharedRefresh('/api/auth/refresh', getCsrfToken)
+  return outcome !== 'failed'
 }
 
 async function fetchMe(): Promise<Response | null> {

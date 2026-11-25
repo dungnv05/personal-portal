@@ -15,30 +15,43 @@ import {
 } from './_helpers.js';
 import { rateLimit } from './_ratelimit.js';
 
-const REFRESH_TOKEN_ERRORS = new Set([
+const RETRYABLE_REFRESH_ERRORS = new Set(['refresh_token_already_used']);
+
+const FATAL_REFRESH_ERRORS = new Set([
   'refresh_token_not_found',
-  'refresh_token_already_used',
   'invalid_grant',
   'session_not_found',
   'session_expired',
 ]);
 
-async function isRevokedRefreshResponse(response) {
-  if (response.status !== 400) {
-    return false;
-  }
+async function classifyRefresh400(response) {
   let errPayload = null;
   try {
     errPayload = await response.json();
   } catch {
-    return false;
+    return 'upstream';
   }
   if (!errPayload || typeof errPayload !== 'object') {
-    return false;
+    return 'upstream';
   }
   const errorCode = typeof errPayload.error_code === 'string' ? errPayload.error_code : '';
   const errorName = typeof errPayload.error === 'string' ? errPayload.error : '';
-  return REFRESH_TOKEN_ERRORS.has(errorCode) || REFRESH_TOKEN_ERRORS.has(errorName);
+  const errorDescription =
+    typeof errPayload.error_description === 'string' ? errPayload.error_description : '';
+  const msg = typeof errPayload.msg === 'string' ? errPayload.msg : '';
+
+  if (
+    RETRYABLE_REFRESH_ERRORS.has(errorCode) ||
+    RETRYABLE_REFRESH_ERRORS.has(errorName) ||
+    /already used/i.test(errorDescription) ||
+    /already used/i.test(msg)
+  ) {
+    return 'retry';
+  }
+  if (FATAL_REFRESH_ERRORS.has(errorCode) || FATAL_REFRESH_ERRORS.has(errorName)) {
+    return 'fatal';
+  }
+  return 'upstream';
 }
 
 /**
@@ -97,7 +110,11 @@ export default async function handler(req, res) {
   }
 
   if (response.status === 400) {
-    if (await isRevokedRefreshResponse(response)) {
+    const kind = await classifyRefresh400(response);
+    if (kind === 'retry') {
+      return res.status(409).json({ ok: false, error: 'refresh_retry' });
+    }
+    if (kind === 'fatal') {
       res.setHeader('Set-Cookie', clearSessionCookies());
       return res.status(401).json({ ok: false, error: 'refresh_failed' });
     }

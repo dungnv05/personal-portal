@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineYunHeader, isAllowedAuthOrigin, YunHeader } from './index'
+import { __resetRefreshCoordinatorForTests } from '../shared-auth/refreshCoordinator'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -46,6 +47,7 @@ describe('<yun-header>', () => {
 
   beforeEach(() => {
     document.body.innerHTML = ''
+    __resetRefreshCoordinatorForTests()
     document.cookie = 'csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
   })
 
@@ -506,6 +508,7 @@ describe('<yun-header>', () => {
 
     for (const badUrl of disallowed) {
       document.body.innerHTML = ''
+    __resetRefreshCoordinatorForTests()
       const fetchMock = vi.fn().mockResolvedValue(
         jsonResponse({
           ok: true,
@@ -550,6 +553,7 @@ describe('<yun-header>', () => {
 
     for (let i = 0; i < badProfileUrls.length; i += 1) {
       document.body.innerHTML = ''
+    __resetRefreshCoordinatorForTests()
       fetchMock.mockClear()
       const el = document.createElement('yun-header') as YunHeader
       el.setAttribute('auth-base', badAuthBases[i]!)
@@ -740,6 +744,7 @@ describe('<yun-header>', () => {
 
     // If retried /me still returns 401, never loops
     fetchMock.mockReset()
+    __resetRefreshCoordinatorForTests()
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
       .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'refresh_failed' }, 401))

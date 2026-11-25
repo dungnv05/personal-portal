@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { __resetRefreshCoordinatorForTests } from '../src/shared-auth/refreshCoordinator'
+import type { YunHeader } from '../src/yun-header/index'
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js'
 
 const LEGACY_SESSION_KEY = 'yundev_session'
@@ -168,9 +170,64 @@ async function loadSharedAuth() {
 }
 
 describe('sharedAuth (HttpOnly cookie flow)', () => {
+  it('page-load: <yun-header> and getSessionUser share a single /api/auth/refresh POST', async () => {
+    document.body.innerHTML = ''
+    document.cookie = 'csrf=csrf-page-load; path=/'
+
+    let refreshed = false
+    let refreshCalls = 0
+    const userPayload = {
+      id: 'user-pageload',
+      email: 'pageload@yundev.space',
+      display_name: 'Page Load',
+    }
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = getRequestUrl(input)
+      if (url.endsWith('/api/auth/me')) {
+        if (!refreshed) {
+          return jsonResponse({ ok: false }, 401)
+        }
+        return jsonResponse({ ok: true, user: userPayload }, 200)
+      }
+      if (url.endsWith('/api/auth/refresh')) {
+        refreshCalls += 1
+        refreshed = true
+        return jsonResponse({ ok: true, user: userPayload }, 200)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { defineYunHeader } = await import('../src/yun-header/index')
+    defineYunHeader()
+    const auth = await loadSharedAuth()
+
+    const header = document.createElement('yun-header') as YunHeader
+    header.setAttribute('auth-base', 'https://www.yundev.space')
+    document.body.appendChild(header)
+
+    const sessionUser = await auth.getSessionUser()
+    await vi.waitFor(() => {
+      expect(header.state).toBe('signed-in')
+    })
+
+    expect(refreshCalls).toBe(1)
+    expect(header.user?.id).toBe('user-pageload')
+    expect(sessionUser).toEqual({
+      id: 'user-pageload',
+      email: 'pageload@yundev.space',
+      display_name: 'Page Load',
+      avatar_url: null,
+    })
+
+    header.remove()
+    document.body.innerHTML = ''
+  })
   beforeEach(() => {
     setTestUrl('https://portal.yundev.space/')
     clearBrowserStorage()
+    __resetRefreshCoordinatorForTests()
     mockState.reset()
     vi.stubGlobal(
       'fetch',
@@ -180,6 +237,7 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
 
   afterEach(() => {
     clearBrowserStorage()
+    __resetRefreshCoordinatorForTests()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     mockState.reset()

@@ -821,6 +821,97 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       ])
     })
 
+    it('clears all three cookies and returns 401 refresh_failed on refresh_token_not_found', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ error_code: 'refresh_token_not_found' }), { status: 400 }),
+          ),
+        ),
+      )
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=missing-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(401)
+      expect(res.body).toEqual({ ok: false, error: 'refresh_failed' })
+      expect(res.getHeader('set-cookie')).toEqual([
+        'sb_access=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=0',
+        'sb_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=0',
+        'csrf=; Secure; SameSite=Lax; Path=/; Domain=.yundev.space; Max-Age=0',
+      ])
+    })
+
+    it('returns 409 refresh_retry with no Set-Cookie when Supabase returns refresh_token_already_used', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ error_code: 'refresh_token_already_used' }), { status: 400 }),
+          ),
+        ),
+      )
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=used-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(409)
+      expect(res.body).toEqual({ ok: false, error: 'refresh_retry' })
+      expect(res.getHeader('set-cookie')).toBeUndefined()
+    })
+
+    it('returns 409 refresh_retry with no Set-Cookie when invalid_grant has Already Used description', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: 'invalid_grant',
+                error_description: 'Invalid Refresh Token: Already Used',
+              }),
+              { status: 400 },
+            ),
+          ),
+        ),
+      )
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=used-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(409)
+      expect(res.body).toEqual({ ok: false, error: 'refresh_retry' })
+      expect(res.getHeader('set-cookie')).toBeUndefined()
+    })
+
     it('returns 502 and leaves cookies untouched on network error', async () => {
       vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('network down'))))
 

@@ -1,4 +1,5 @@
 import { isAllowedHost } from '../../shared/allowed-origins.js'
+import { sharedRefresh } from '../shared-auth/refreshCoordinator'
 
 export type YunHeaderApp = 'portal' | 'tinh-luong' | 'brse' | 'vang-vong' | 'ivf'
 export type YunHeaderVariant = 'bar' | 'overlay'
@@ -737,7 +738,6 @@ export class YunHeader extends HTMLElement {
   private _loggingOut = false
   private _logoutError = false
   private _abortController: AbortController | null = null
-  private _refreshPromise: Promise<boolean> | null = null
   private _loadingTimer: ReturnType<typeof setTimeout> | null = null
   private _lastAnnouncedAuthKey: string | null = null
   private _rendered = false
@@ -999,36 +999,8 @@ export class YunHeader extends HTMLElement {
   }
 
   private async _tryRefreshSession(): Promise<boolean> {
-    const csrfToken = readCsrfCookie()
-    if (!csrfToken) {
-      return false
-    }
-    if (this._refreshPromise) {
-      return this._refreshPromise
-    }
-
-    this._refreshPromise = (async () => {
-      try {
-        const freshCsrf = readCsrfCookie()
-        if (!freshCsrf) {
-          return false
-        }
-        const response = await fetch(`${this.authBase}/api/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'x-csrf-token': freshCsrf,
-          },
-        })
-        return response.status === 200
-      } catch {
-        return false
-      } finally {
-        this._refreshPromise = null
-      }
-    })()
-
-    return this._refreshPromise
+    const outcome = await sharedRefresh(`${this.authBase}/api/auth/refresh`, readCsrfCookie)
+    return outcome !== 'failed'
   }
 
   private _applySignedOutOrExpired(wasSignedIn: boolean): void {
