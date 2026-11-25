@@ -677,4 +677,27 @@ describe('<yun-header>', () => {
     el.setAttribute('skip-target', '#main-content_1')
     expect(skipLink.getAttribute('href')).toBe('#main-content_1')
   })
+
+  it('hides expired and logout notices via [hidden] CSS rule and sets hidden attribute when signed out', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: false }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    expect(el.state).toBe('signed-out')
+
+    const styleText = Array.from(el.shadowRoot!.querySelectorAll('style'))
+      .map((s) => s.textContent ?? '')
+      .join('\n')
+    expect(styleText).toMatch(
+      /\.yh-expired-notice\[hidden\]\s*,\s*\.yh-logout-notice\[hidden\]\s*\{\s*display\s*:\s*none\s*;?\s*\}/,
+    )
+
+    const expiredNotice = el.shadowRoot!.querySelector('.yh-expired-notice')
+    const logoutNotice = el.shadowRoot!.querySelector('.yh-logout-notice')
+    expect(expiredNotice?.hasAttribute('hidden')).toBe(true)
+    expect(logoutNotice?.hasAttribute('hidden')).toBe(true)
+  })
 })

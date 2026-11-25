@@ -365,6 +365,8 @@ const STYLES = `
   display: none;
 }
 
+.yh-expired-notice[hidden], .yh-logout-notice[hidden] { display: none; }
+
 .yh-sheet {
   width: 85vw;
   max-width: 360px;
