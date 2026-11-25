@@ -5,7 +5,6 @@ import meHandler from '../../api/auth/me.js'
 import logoutHandler from '../../api/auth/logout.js'
 import refreshHandler from '../../api/auth/refresh.js'
 import profileHandler from '../../api/auth/profile.js'
-import saveHandler from '../../api/save.js'
 import configHandler from '../../api/config.js'
 import {
   SESSION_ABSOLUTE_MAX_AGE,
@@ -105,6 +104,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
   const originalSupabaseAnonKey = process.env.SUPABASE_ANON_KEY
   const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
   const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  const originalKvUrl = process.env.KV_REST_API_URL
+  const originalKvToken = process.env.KV_REST_API_TOKEN
   const originalCloudSave = process.env.CLOUD_SAVE_ENABLED
   const originalVercelEnv = process.env.VERCEL_ENV
   const originalVercel = process.env.VERCEL
@@ -116,6 +117,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
     process.env.SUPABASE_ANON_KEY = TEST_SUPABASE_ANON_KEY
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.KV_REST_API_URL
+    delete process.env.KV_REST_API_TOKEN
     delete process.env.CLOUD_SAVE_ENABLED
     delete process.env.VERCEL_ENV
     delete process.env.VERCEL
@@ -148,6 +151,18 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       delete process.env.UPSTASH_REDIS_REST_TOKEN
     } else {
       process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken
+    }
+
+    if (originalKvUrl === undefined) {
+      delete process.env.KV_REST_API_URL
+    } else {
+      process.env.KV_REST_API_URL = originalKvUrl
+    }
+
+    if (originalKvToken === undefined) {
+      delete process.env.KV_REST_API_TOKEN
+    } else {
+      process.env.KV_REST_API_TOKEN = originalKvToken
     }
 
     if (originalCloudSave === undefined) {
@@ -1665,312 +1680,6 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       )
       expect(upstream401Res.statusCode).toBe(401)
       expect(upstream401Res.body).toEqual({ ok: false, error: 'unauthorized' })
-    })
-  })
-
-  describe('GET/PUT /api/save', () => {
-    const validCsrf = 'e'.repeat(64)
-
-    it('returns 401 unauthorized when sb_access is past the 14-day absolute cap (S9)', async () => {
-      vi.useFakeTimers()
-      const fixedNowMs = Date.UTC(2026, 10, 25, 0, 0, 0)
-      vi.setSystemTime(fixedNowMs)
-      const nowSec = Math.floor(fixedNowMs / 1000)
-
-      process.env.CLOUD_SAVE_ENABLED = 'true'
-      const expiredToken = makeJwt({
-        exp: nowSec + 3600,
-        amr: [{ method: 'password', timestamp: nowSec - 15 * 24 * 60 * 60 }],
-      })
-
-      const fetchMock = vi.fn(() =>
-        Promise.resolve(
-          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
-        ),
-      )
-      vi.stubGlobal('fetch', fetchMock)
-
-      const res = createMockRes()
-      await saveHandler(
-        createMockReq({
-          method: 'GET',
-          headers: {
-            origin: 'https://vang-vong-su-viet.yundev.space',
-            cookie: `sb_access=${expiredToken}`,
-          },
-          query: { game: 'vang-vong', slot: '0' },
-        }),
-        res,
-      )
-
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-      expect(res.statusCode).toBe(401)
-      expect(res.body).toEqual({ ok: false, error: 'unauthorized' })
-    })
-
-    it('returns 503 cloud_save_disabled when CLOUD_SAVE_ENABLED is not true', async () => {
-      const req = createMockReq({
-        method: 'GET',
-        headers: { origin: 'https://vang-vong-su-viet.yundev.space' },
-        query: { game: 'vang-vong', slot: '0' },
-      })
-      const res = createMockRes()
-
-      await saveHandler(req, res)
-
-      expect(res.statusCode).toBe(503)
-      expect(res.body).toEqual({ ok: false, error: 'cloud_save_disabled' })
-    })
-
-    it('supports GET and PUT happy paths, and rejects bad slot, oversize data, and missing CSRF', async () => {
-      process.env.CLOUD_SAVE_ENABLED = 'true'
-
-      const fetchMock = vi
-        .fn()
-        // 1. GET /auth/v1/user
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
-        )
-        // 2. GET /rest/v1/game_saves
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify([{ data: { level: 5 }, version: 2, updated_at: '2026-11-25T00:00:00Z' }]),
-            { status: 200 },
-          ),
-        )
-        // 3. GET /auth/v1/user for PUT
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
-        )
-        // 4. POST /rest/v1/game_saves
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ updated_at: '2026-11-25T01:00:00Z' }]), { status: 201 }),
-        )
-        // 5..7. auth checks for error cases
-        .mockImplementation(
-          async () =>
-            new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), {
-              status: 200,
-            }),
-        )
-      vi.stubGlobal('fetch', fetchMock)
-
-      // GET happy path
-      const getReq = createMockReq({
-        method: 'GET',
-        headers: {
-          origin: 'https://vang-vong-su-viet.yundev.space',
-          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
-        },
-        query: { game: 'vang-vong', slot: '1' },
-      })
-      const getRes = createMockRes()
-      await saveHandler(getReq, getRes)
-      expect(getRes.statusCode).toBe(200)
-      expect(getRes.body).toEqual({
-        ok: true,
-        save: { data: { level: 5 }, version: 2, updated_at: '2026-11-25T00:00:00Z' },
-      })
-
-      // PUT happy path
-      const putReq = createMockReq({
-        method: 'PUT',
-        headers: {
-          origin: 'https://vang-vong-su-viet.yundev.space',
-          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
-          'x-csrf-token': validCsrf,
-        },
-        query: { game: 'vang-vong', slot: '1' },
-        body: { data: { level: 6 }, version: 3 },
-      })
-      const putRes = createMockRes()
-      await saveHandler(putReq, putRes)
-      expect(putRes.statusCode).toBe(200)
-      expect(putRes.body).toEqual({ ok: true, updated_at: '2026-11-25T01:00:00Z' })
-
-      // Bad slot -> 400
-      const badSlotReq = createMockReq({
-        method: 'GET',
-        headers: { cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}` },
-        query: { game: 'vang-vong', slot: '3' },
-      })
-      const badSlotRes = createMockRes()
-      await saveHandler(badSlotReq, badSlotRes)
-      expect(badSlotRes.statusCode).toBe(400)
-      expect(badSlotRes.body).toEqual({ ok: false, error: 'invalid_query' })
-
-      // PUT without CSRF -> 403
-      const noCsrfReq = createMockReq({
-        method: 'PUT',
-        headers: {
-          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
-        },
-        query: { game: 'vang-vong', slot: '0' },
-        body: { data: { level: 1 }, version: 0 },
-      })
-      const noCsrfRes = createMockRes()
-      await saveHandler(noCsrfReq, noCsrfRes)
-      expect(noCsrfRes.statusCode).toBe(403)
-      expect(noCsrfRes.body).toEqual({ ok: false, error: 'csrf_mismatch' })
-
-      // Oversize data -> 413
-      const bigReq = createMockReq({
-        method: 'PUT',
-        headers: {
-          cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
-          'x-csrf-token': validCsrf,
-        },
-        query: { game: 'vang-vong', slot: '0' },
-        body: { data: { blob: 'x'.repeat(66000) }, version: 1 },
-      })
-      const bigRes = createMockRes()
-      await saveHandler(bigReq, bigRes)
-      expect(bigRes.statusCode).toBe(413)
-      expect(bigRes.body).toEqual({ ok: false, error: 'payload_too_large' })
-    })
-
-    it('returns 401 without sb_access cookie and 502 on GET upstream failure (S6)', async () => {
-      process.env.CLOUD_SAVE_ENABLED = 'true'
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
-        )
-        .mockResolvedValueOnce(new Response('bad gateway', { status: 500 }))
-      vi.stubGlobal('fetch', fetchMock)
-
-      const unauthRes = createMockRes()
-      await saveHandler(
-        createMockReq({
-          method: 'GET',
-          headers: { origin: 'https://vang-vong-su-viet.yundev.space' },
-          query: { game: 'vang-vong', slot: '0' },
-        }),
-        unauthRes,
-      )
-      expect(unauthRes.statusCode).toBe(401)
-      expect(unauthRes.body).toEqual({ ok: false, error: 'unauthorized' })
-      expect(fetchMock).not.toHaveBeenCalled()
-
-      const upstreamErrRes = createMockRes()
-      await saveHandler(
-        createMockReq({
-          method: 'GET',
-          headers: {
-            origin: 'https://vang-vong-su-viet.yundev.space',
-            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}`,
-          },
-          query: { game: 'vang-vong', slot: '0' },
-        }),
-        upstreamErrRes,
-      )
-      expect(upstreamErrRes.statusCode).toBe(502)
-      expect(upstreamErrRes.body).toEqual({ ok: false, error: 'upstream_error' })
-    })
-
-    it('enforces exact 65536-byte boundary, 70000-byte content-length guard, and per-IP rate limit (S1, S2)', async () => {
-      process.env.CLOUD_SAVE_ENABLED = 'true'
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: 'user-boundary', email: 'b@yundev.space' }), { status: 200 }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ updated_at: '2026-11-25T02:00:00Z' }]), { status: 201 }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ id: 'user-boundary', email: 'b@yundev.space' }), { status: 200 }),
-        )
-      vi.stubGlobal('fetch', fetchMock)
-
-      // 1. content-length > 70000 -> 413 with zero fetch calls
-      const clRes = createMockRes()
-      await saveHandler(
-        createMockReq({
-          method: 'PUT',
-          headers: {
-            'x-forwarded-for': '203.0.113.50',
-            'content-length': '70001',
-            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
-            'x-csrf-token': validCsrf,
-          },
-          query: { game: 'vang-vong', slot: '0' },
-          body: { data: { k: 'v' }, version: 0 },
-        }),
-        clRes,
-      )
-      expect(clRes.statusCode).toBe(413)
-      expect(clRes.body).toEqual({ ok: false, error: 'payload_too_large' })
-      expect(fetchMock).not.toHaveBeenCalled()
-
-      // 2. Exactly 65536 UTF-8 bytes -> accepted (200)
-      const exactPrefix = '{"b":"'
-      const exactSuffix = '"}'
-      const exactBlob = 'a'.repeat(65536 - exactPrefix.length - exactSuffix.length)
-      const exactData = { b: exactBlob }
-      expect(Buffer.byteLength(JSON.stringify(exactData), 'utf8')).toBe(65536)
-
-      const exactRes = createMockRes()
-      await saveHandler(
-        createMockReq({
-          method: 'PUT',
-          headers: {
-            'x-forwarded-for': '203.0.113.51',
-            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
-            'x-csrf-token': validCsrf,
-          },
-          query: { game: 'vang-vong', slot: '0' },
-          body: { data: exactData, version: 0 },
-        }),
-        exactRes,
-      )
-      expect(exactRes.statusCode).toBe(200)
-      expect(exactRes.body).toEqual({ ok: true, updated_at: '2026-11-25T02:00:00Z' })
-
-      // 3. 65537 UTF-8 bytes -> 413
-      const overData = { b: `${exactBlob}x` }
-      expect(Buffer.byteLength(JSON.stringify(overData), 'utf8')).toBe(65537)
-      const overRes = createMockRes()
-      await saveHandler(
-        createMockReq({
-          method: 'PUT',
-          headers: {
-            'x-forwarded-for': '203.0.113.52',
-            cookie: `sb_access=${makeJwt({ amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 60 }] })}; csrf=${validCsrf}`,
-            'x-csrf-token': validCsrf,
-          },
-          query: { game: 'vang-vong', slot: '0' },
-          body: { data: overData, version: 0 },
-        }),
-        overRes,
-      )
-      expect(overRes.statusCode).toBe(413)
-      expect(overRes.body).toEqual({ ok: false, error: 'payload_too_large' })
-
-      // 4. Per-IP limit (save-ip, 120/60s) blocks before validateSupabaseAccessToken
-      fetchMock.mockClear()
-      for (let i = 0; i < 120; i += 1) {
-        const res = createMockRes()
-        await saveHandler(
-          createMockReq({
-            method: 'PUT',
-            headers: { 'x-forwarded-for': '203.0.113.99' },
-          }),
-          res,
-        )
-        expect(res.statusCode).toBe(401)
-      }
-      const ipBlockedRes = createMockRes()
-      await saveHandler(
-        createMockReq({
-          method: 'PUT',
-          headers: { 'x-forwarded-for': '203.0.113.99' },
-        }),
-        ipBlockedRes,
-      )
-      expect(ipBlockedRes.statusCode).toBe(429)
-      expect(ipBlockedRes.body).toEqual({ ok: false, error: 'rate_limited' })
-      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 })

@@ -4,7 +4,8 @@ import { getHeader, shouldAllowDevOrigins } from './_helpers.js';
  * Fixed-window rate limiter for Vercel serverless functions.
  *
  * Production store: Upstash Redis REST (used whenever both
- * UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set, in any
+ * UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set, or the Vercel
+ * Marketplace fallback KV_REST_API_URL and KV_REST_API_TOKEN, in any
  * environment).
  *
  * The in-memory Map store is used only:
@@ -18,10 +19,39 @@ const MAX_MEMORY_KEYS = 10000;
 const UPSTASH_TIMEOUT_MS = 800;
 const memoryStore = new Map();
 let warnedMissingUpstashInProd = false;
+let warnedUpstashError = false;
 
 export function resetMemoryRateLimitStore() {
   memoryStore.clear();
   warnedMissingUpstashInProd = false;
+  warnedUpstashError = false;
+}
+
+export function getUpstashCredentials() {
+  const u1 = (process.env.UPSTASH_REDIS_REST_URL || '').trim();
+  const t1 = (process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
+  if (u1 && t1) {
+    return { url: u1, token: t1 };
+  }
+
+  const u2 = (process.env.KV_REST_API_URL || '').trim();
+  const t2 = (process.env.KV_REST_API_TOKEN || '').trim();
+  if (u2 && t2) {
+    return { url: u2, token: t2 };
+  }
+
+  return null;
+}
+
+export function isSharedRateLimitConfigured() {
+  return getUpstashCredentials() !== null;
+}
+
+function warnUpstashErrorOnce() {
+  if (!warnedUpstashError) {
+    warnedUpstashError = true;
+    console.warn('[ratelimit] Upstash request failed; using per-instance in-memory limiter');
+  }
 }
 
 export function getClientIp(req) {
@@ -131,14 +161,15 @@ export async function rateLimit(req, res, { bucket, limit, windowSec = 60, key }
   const resolvedKey = typeof key === 'string' && key.length > 0 ? key : getClientIp(req);
   const storeKey = `rl:${bucket}:${resolvedKey}`;
 
-  const upstashUrl = (process.env.UPSTASH_REDIS_REST_URL || '').trim();
-  const upstashToken = (process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
+  const creds = getUpstashCredentials();
+
 
   let outcome;
-  if (upstashUrl && upstashToken) {
+  if (creds) {
     try {
-      outcome = await incrementUpstash(upstashUrl, upstashToken, storeKey, windowSec);
+      outcome = await incrementUpstash(creds.url, creds.token, storeKey, windowSec);
     } catch {
+      warnUpstashErrorOnce();
       outcome = incrementMemory(storeKey, windowSec);
     }
   } else {
