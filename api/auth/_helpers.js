@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import crypto from 'node:crypto';
-import { DEV_ORIGINS, PROD_ORIGINS, isAllowedOrigin } from '../../shared/allowed-origins.js';
+import { isAllowedOrigin } from '../../shared/allowed-origins.js';
 
 /**
  * Shared helpers for /api/auth/* Vercel serverless functions.
@@ -15,13 +15,23 @@ export const COOKIE_PATH = '/';
 export const ACCESS_FALLBACK_MAX_AGE = 3600;
 export const REFRESH_MAX_AGE = 2592000;
 
-export const ALLOWED_ORIGINS =
-  process.env.VERCEL_ENV !== 'production'
-    ? [...PROD_ORIGINS, ...DEV_ORIGINS]
-    : [...PROD_ORIGINS];
-
 const DEFAULT_ALLOWED_ORIGIN = 'https://yundev.space';
 const ALLOWED_HEADERS = 'content-type, x-csrf-token';
+
+/**
+ * Fail-closed dev-origin check:
+ * - Local dev (VERCEL_ENV === 'development' or (VERCEL_ENV === undefined && VERCEL !== '1'))
+ *   allows localhost origins when NODE_ENV !== 'production'.
+ * - On Vercel (VERCEL === '1'), a missing VERCEL_ENV counts as production;
+ *   preview and production never allow localhost origins.
+ */
+export function shouldAllowDevOrigins() {
+  return (
+    (process.env.VERCEL_ENV === 'development' ||
+      (process.env.VERCEL_ENV === undefined && process.env.VERCEL !== '1')) &&
+    process.env.NODE_ENV !== 'production'
+  );
+}
 
 export function getHeader(req, targetName) {
   const headers = req?.headers;
@@ -43,7 +53,7 @@ export function getHeader(req, targetName) {
 
 export function applyCors(req, res, allowedMethods) {
   const origin = getHeader(req, 'origin');
-  const allowDev = process.env.VERCEL_ENV !== 'production';
+  const allowDev = shouldAllowDevOrigins();
   if (isAllowedOrigin(origin, { allowDev })) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {

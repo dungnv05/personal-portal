@@ -113,6 +113,7 @@ function _(e) {
 		id: n,
 		email: r,
 		displayName: u,
+		rawDisplayName: a,
 		avatarUrl: l(c(t.avatar_url) ?? (i ? c(i.avatar_url) : null)),
 		initials: g(u)
 	};
@@ -248,33 +249,43 @@ var x = class extends HTMLElement {
 		}, r);
 		this._loadingTimer = i;
 		try {
-			let n = await fetch(`${this.authBase}/api/auth/me`, {
+			let r = await fetch(`${this.authBase}/api/auth/me`, {
 				method: "GET",
 				credentials: "include",
 				signal: e.signal
 			});
-			if (e.signal.aborted) return;
-			if (n.status === 401 && v()) {
-				let t = await this._tryRefreshSession();
-				if (e.signal.aborted || t && (n = await fetch(`${this.authBase}/api/auth/me`, {
+			if (e.signal.aborted) {
+				if (n) throw Error("Request timed out");
+				return;
+			}
+			if (r.status === 401 && v()) {
+				let t = await this._raceWithAbort(this._tryRefreshSession(), e.signal);
+				if (e.signal.aborted) {
+					if (n) throw Error("Request timed out");
+					return;
+				}
+				if (t && (r = await fetch(`${this.authBase}/api/auth/me`, {
 					method: "GET",
 					credentials: "include",
 					signal: e.signal
-				}), e.signal.aborted)) return;
+				}), e.signal.aborted)) {
+					if (n) throw Error("Request timed out");
+					return;
+				}
 			}
-			if (n.status === 200) {
+			if (r.status === 200) {
 				let e = null;
 				try {
-					e = await n.json();
+					e = await r.json();
 				} catch {
 					e = null;
 				}
-				let r = _(e);
-				if (r) {
-					let e = this._lastStableState !== "signed-in" || this._user?.id !== r.id;
-					this._stale = !1, this._state = "signed-in", this._lastStableState = "signed-in", this._user = r, e && this._announce(`Đã đăng nhập với tên ${r.displayName}`);
+				let n = _(e);
+				if (n) {
+					let e = this._lastStableState !== "signed-in" || this._user?.id !== n.id;
+					this._stale = !1, this._state = "signed-in", this._lastStableState = "signed-in", this._user = n, e && this._announce(`Đã đăng nhập với tên ${n.displayName}`);
 				} else this._applySignedOutOrExpired(t);
-			} else n.status === 401 ? this._applySignedOutOrExpired(t) : (this._stale = !1, this._logoutError = !1, this._state = "error", this._lastStableState = "error", this._user = null);
+			} else r.status === 401 ? this._applySignedOutOrExpired(t) : (this._stale = !1, this._logoutError = !1, this._state = "error", this._lastStableState = "error", this._user = null);
 		} catch {
 			if (n) t && this._user ? (this._stale = !0, this._state = "signed-in", this._lastStableState = "signed-in") : (this._stale = !1, this._logoutError = !1, this._state = "signed-out", this._lastStableState = "signed-out", this._user = null);
 			else if (e.signal.aborted) return;
@@ -283,6 +294,18 @@ var x = class extends HTMLElement {
 			clearTimeout(i), this._loadingTimer === i && (this._loadingTimer = null), this._abortController === e && (this._abortController = null);
 		}
 		this._renderAccountRegions(), this._dispatchAuthChange();
+	}
+	_raceWithAbort(e, t) {
+		return t.aborted ? Promise.reject(/* @__PURE__ */ Error("Aborted")) : new Promise((n, r) => {
+			let i = () => {
+				r(/* @__PURE__ */ Error("Aborted"));
+			};
+			t.addEventListener("abort", i, { once: !0 }), e.then((e) => {
+				t.removeEventListener("abort", i), n(e);
+			}, (e) => {
+				t.removeEventListener("abort", i), r(e instanceof Error ? e : /* @__PURE__ */ Error("Refresh failed"));
+			});
+		});
 	}
 	async _tryRefreshSession() {
 		return v() ? (this._refreshPromise ||= (async () => {

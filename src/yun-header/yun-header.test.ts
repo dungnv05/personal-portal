@@ -748,4 +748,29 @@ describe('<yun-header>', () => {
     expect(el.state).toBe('expired')
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('transitions out of loading and fires yh-auth-change when 3 s timeout fires while refresh POST is pending (M1)', async () => {
+    vi.useFakeTimers()
+    document.cookie = 'csrf=csrf-timeout-tok; path=/'
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
+      .mockImplementationOnce(() => new Promise<Response>(() => {}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('auth-base', 'https://www.yundev.space')
+    const authChangeSpy = vi.fn()
+    el.addEventListener('yh-auth-change', authChangeSpy)
+
+    document.body.appendChild(el)
+    await vi.advanceTimersByTimeAsync(3500)
+
+    expect(el.state).toBe('signed-out')
+    expect(el.state).not.toBe('loading')
+    expect(authChangeSpy).toHaveBeenCalledTimes(1)
+    const event = authChangeSpy.mock.calls[0]?.[0] as CustomEvent<{ state: string }> | undefined
+    expect(event?.detail.state).toBe('signed-out')
+  })
 })

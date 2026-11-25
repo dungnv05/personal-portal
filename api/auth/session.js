@@ -1,11 +1,13 @@
+import { isAllowedOrigin } from '../../shared/allowed-origins.js';
 import {
   REFRESH_MAX_AGE,
   applyCors,
   computeAccessMaxAge,
   generateCsrfToken,
+  getHeader,
   isValidCookieToken,
-  parseJsonBody,
   serializeCookie,
+  shouldAllowDevOrigins,
   validateSupabaseAccessToken,
 } from './_helpers.js';
 import { rateLimit } from './_ratelimit.js';
@@ -32,7 +34,17 @@ export default async function handler(req, res) {
     return;
   }
 
-  const body = parseJsonBody(req.body);
+  const origin = getHeader(req, 'origin').trim();
+  if (!isAllowedOrigin(origin, { allowDev: shouldAllowDevOrigins() })) {
+    return res.status(403).json({ ok: false, error: 'origin_not_allowed' });
+  }
+
+  const contentType = getHeader(req, 'content-type').trim().toLowerCase();
+  if (!contentType.startsWith('application/json')) {
+    return res.status(415).json({ ok: false, error: 'unsupported_media_type' });
+  }
+
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
   const accessToken = typeof body?.access_token === 'string' ? body.access_token.trim() : '';
   const refreshToken = typeof body?.refresh_token === 'string' ? body.refresh_token.trim() : '';
 

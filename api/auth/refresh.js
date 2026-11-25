@@ -13,6 +13,32 @@ import {
 } from './_helpers.js';
 import { rateLimit } from './_ratelimit.js';
 
+const REFRESH_TOKEN_ERRORS = new Set([
+  'refresh_token_not_found',
+  'refresh_token_already_used',
+  'invalid_grant',
+  'session_not_found',
+  'session_expired',
+]);
+
+async function isRevokedRefreshResponse(response) {
+  if (response.status !== 400) {
+    return false;
+  }
+  let errPayload = null;
+  try {
+    errPayload = await response.json();
+  } catch {
+    return false;
+  }
+  if (!errPayload || typeof errPayload !== 'object') {
+    return false;
+  }
+  const errorCode = typeof errPayload.error_code === 'string' ? errPayload.error_code : '';
+  const errorName = typeof errPayload.error === 'string' ? errPayload.error : '';
+  return REFRESH_TOKEN_ERRORS.has(errorCode) || REFRESH_TOKEN_ERRORS.has(errorName);
+}
+
 /**
  * POST /api/auth/refresh
  * Rotates the HttpOnly sb_refresh cookie via Supabase and issues fresh session cookies.
@@ -68,13 +94,16 @@ export default async function handler(req, res) {
     return res.status(502).json({ ok: false, error: 'auth_upstream_error' });
   }
 
-  if (response.status === 400 || response.status === 401) {
-    res.setHeader('Set-Cookie', [
-      serializeCookie('sb_access', '', { httpOnly: true, maxAge: 0 }),
-      serializeCookie('sb_refresh', '', { httpOnly: true, maxAge: 0 }),
-      serializeCookie('csrf', '', { httpOnly: false, maxAge: 0 }),
-    ]);
-    return res.status(401).json({ ok: false, error: 'refresh_failed' });
+  if (response.status === 400) {
+    if (await isRevokedRefreshResponse(response)) {
+      res.setHeader('Set-Cookie', [
+        serializeCookie('sb_access', '', { httpOnly: true, maxAge: 0 }),
+        serializeCookie('sb_refresh', '', { httpOnly: true, maxAge: 0 }),
+        serializeCookie('csrf', '', { httpOnly: false, maxAge: 0 }),
+      ]);
+      return res.status(401).json({ ok: false, error: 'refresh_failed' });
+    }
+    return res.status(502).json({ ok: false, error: 'auth_upstream_error' });
   }
 
   if (!response.ok) {

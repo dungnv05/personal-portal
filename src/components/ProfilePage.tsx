@@ -4,6 +4,7 @@ import type { YunHeader } from '../yun-header'
 
 export type ProfilePageProps = {
   user: SessionUser | null
+  authResolved?: boolean
   onOpenSignIn: () => void
   onUserUpdated?: (user: SessionUser) => void
 }
@@ -33,7 +34,7 @@ function computeInitials(label: string): string {
     .toUpperCase()
 }
 
-export function ProfilePage({ user, onOpenSignIn, onUserUpdated }: ProfilePageProps) {
+export function ProfilePage({ user, authResolved = true, onOpenSignIn, onUserUpdated }: ProfilePageProps) {
   const [displayNameInput, setDisplayNameInput] = useState(() =>
     user ? (user.display_name?.trim() ?? '') : '',
   )
@@ -46,6 +47,15 @@ export function ProfilePage({ user, onOpenSignIn, onUserUpdated }: ProfilePagePr
   useEffect(() => {
     setDisplayNameInput(userId ? syncedDisplayName : '')
   }, [userId, syncedDisplayName])
+
+  if (!authResolved && !user) {
+    return (
+      <section className="cyber-card profile-card" aria-labelledby="profile-heading">
+        <h2 id="profile-heading" className="section-title">Hồ sơ</h2>
+        <p className="profile-note" role="status">Đang tải hồ sơ…</p>
+      </section>
+    )
+  }
 
   if (!user) {
     return (
@@ -63,6 +73,7 @@ export function ProfilePage({ user, onOpenSignIn, onUserUpdated }: ProfilePagePr
 
   const resolvedName = resolveDisplayName(user)
   const initials = computeInitials(resolvedName)
+  const emailLocal = user.email?.split('@')[0]?.trim() ?? ''
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setDisplayNameInput(event.target.value)
@@ -125,7 +136,7 @@ export function ProfilePage({ user, onOpenSignIn, onUserUpdated }: ProfilePagePr
             maxLength={50}
             required
             disabled={saving}
-            placeholder="Nhập tên hiển thị"
+            placeholder={emailLocal.length > 0 ? emailLocal : 'Nhập tên hiển thị'}
           />
         </div>
 

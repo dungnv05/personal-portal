@@ -8,6 +8,7 @@ export interface YunHeaderUser {
   id: string
   email: string | null
   displayName: string
+  rawDisplayName: string | null
   avatarUrl: string | null
   initials: string
 }
@@ -649,6 +650,7 @@ function parseUserPayload(payload: unknown): YunHeaderUser | null {
     id,
     email,
     displayName,
+    rawDisplayName,
     avatarUrl,
     initials: computeInitials(displayName),
   }
@@ -879,12 +881,18 @@ export class YunHeader extends HTMLElement {
       })
 
       if (controller.signal.aborted) {
+        if (timedOut) {
+          throw new Error('Request timed out')
+        }
         return
       }
 
       if (response.status === 401 && readCsrfCookie()) {
-        const refreshed = await this._tryRefreshSession()
+        const refreshed = await this._raceWithAbort(this._tryRefreshSession(), controller.signal)
         if (controller.signal.aborted) {
+          if (timedOut) {
+            throw new Error('Request timed out')
+          }
           return
         }
         if (refreshed) {
@@ -894,6 +902,9 @@ export class YunHeader extends HTMLElement {
             signal: controller.signal,
           })
           if (controller.signal.aborted) {
+            if (timedOut) {
+              throw new Error('Request timed out')
+            }
             return
           }
         }
@@ -963,6 +974,28 @@ export class YunHeader extends HTMLElement {
 
     this._renderAccountRegions()
     this._dispatchAuthChange()
+  }
+
+  private _raceWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) {
+      return Promise.reject(new Error('Aborted'))
+    }
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        reject(new Error('Aborted'))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      promise.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort)
+          resolve(value)
+        },
+        (err: unknown) => {
+          signal.removeEventListener('abort', onAbort)
+          reject(err instanceof Error ? err : new Error('Refresh failed'))
+        },
+      )
+    })
   }
 
   private async _tryRefreshSession(): Promise<boolean> {

@@ -12,6 +12,7 @@ import { rateLimit } from './auth/_ratelimit.js';
 
 const ALLOWED_GAMES = new Set(['vang-vong']);
 const MAX_DATA_BYTES = 65536;
+const MAX_CONTENT_LENGTH_BYTES = 70000;
 
 function parseSaveQuery(req) {
   let game = req?.query?.game;
@@ -67,6 +68,20 @@ export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'PUT') {
     res.setHeader('Allow', 'GET, PUT, OPTIONS');
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+  }
+
+  if (req.method === 'PUT') {
+    const rawContentLength = getHeader(req, 'content-length').trim();
+    if (rawContentLength.length > 0) {
+      const contentLength = Number(rawContentLength);
+      if (Number.isFinite(contentLength) && contentLength > MAX_CONTENT_LENGTH_BYTES) {
+        return res.status(413).json({ ok: false, error: 'payload_too_large' });
+      }
+    }
+  }
+
+  if (await rateLimit(req, res, { bucket: 'save-ip', limit: 120, windowSec: 60 })) {
+    return;
   }
 
   const cookies = parseCookies(getHeader(req, 'cookie'));
@@ -155,6 +170,7 @@ export default async function handler(req, res) {
   }
 
   // PUT
+  // TODO(N5): version is stored but not compared (last write wins across devices); decide compare-and-swap before enabling CLOUD_SAVE_ENABLED.
   const body = parseJsonBody(req.body);
   const data = body?.data;
   const version = body?.version;

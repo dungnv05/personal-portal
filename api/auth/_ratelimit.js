@@ -1,21 +1,27 @@
-import { getHeader } from './_helpers.js';
+import { getHeader, shouldAllowDevOrigins } from './_helpers.js';
 
 /**
  * Fixed-window rate limiter for Vercel serverless functions.
  *
- * Uses Upstash Redis REST when both UPSTASH_REDIS_REST_URL and
- * UPSTASH_REDIS_REST_TOKEN are configured, falling back to an in-memory Map
- * on any Upstash error or when Upstash is not configured.
+ * Production store: Upstash Redis REST (used whenever both
+ * UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set, in any
+ * environment).
  *
- * NOTE: The in-memory store is per-instance only (not shared across
- * serverless instances) until Upstash Redis or a WAF rate-limit rule is enabled.
+ * The in-memory Map store is used only:
+ * (a) in local dev/tests when Upstash env vars are absent,
+ * (b) as a fallback in production when Upstash env vars are missing (emits a
+ *     one-time console.warn per process without secret/env values), and
+ * (c) on Upstash error/timeout (fail-open).
  */
 
 const MAX_MEMORY_KEYS = 10000;
+const UPSTASH_TIMEOUT_MS = 800;
 const memoryStore = new Map();
+let warnedMissingUpstashInProd = false;
 
 export function resetMemoryRateLimitStore() {
   memoryStore.clear();
+  warnedMissingUpstashInProd = false;
 }
 
 export function getClientIp(req) {
@@ -77,7 +83,9 @@ async function incrementUpstash(upstashUrl, upstashToken, storeKey, windowSec) {
     body: JSON.stringify([
       ['INCR', storeKey],
       ['EXPIRE', storeKey, windowSec, 'NX'],
+      ['PTTL', storeKey],
     ]),
+    signal: AbortSignal.timeout(UPSTASH_TIMEOUT_MS),
   });
 
   if (!response || !response.ok) {
@@ -85,7 +93,7 @@ async function incrementUpstash(upstashUrl, upstashToken, storeKey, windowSec) {
   }
 
   const results = await response.json();
-  if (!Array.isArray(results) || results.length === 0) {
+  if (!Array.isArray(results) || results.length < 3) {
     throw new Error('Upstash invalid pipeline response');
   }
 
@@ -94,9 +102,24 @@ async function incrementUpstash(upstashUrl, upstashToken, storeKey, windowSec) {
     throw new Error('Upstash INCR failed');
   }
 
+  const expireResult = results[1];
+  if (!expireResult || expireResult.error || typeof expireResult.result !== 'number') {
+    throw new Error('Upstash EXPIRE failed');
+  }
+
+  const pttlResult = results[2];
+  if (
+    !pttlResult ||
+    pttlResult.error ||
+    typeof pttlResult.result !== 'number' ||
+    pttlResult.result < 0
+  ) {
+    throw new Error('Upstash PTTL failed');
+  }
+
   return {
     count: incrResult.result,
-    retryAfterSec: windowSec,
+    retryAfterSec: Math.max(1, Math.ceil(pttlResult.result / 1000)),
   };
 }
 
@@ -119,6 +142,12 @@ export async function rateLimit(req, res, { bucket, limit, windowSec = 60, key }
       outcome = incrementMemory(storeKey, windowSec);
     }
   } else {
+    if (!shouldAllowDevOrigins() && !warnedMissingUpstashInProd) {
+      warnedMissingUpstashInProd = true;
+      console.warn(
+        '[ratelimit] Upstash env vars missing in production; using per-instance in-memory limiter',
+      );
+    }
     outcome = incrementMemory(storeKey, windowSec);
   }
 

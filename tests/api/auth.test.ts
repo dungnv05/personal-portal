@@ -7,6 +7,7 @@ import refreshHandler from '../../api/auth/refresh.js'
 import profileHandler from '../../api/auth/profile.js'
 import saveHandler from '../../api/save.js'
 import configHandler from '../../api/config.js'
+import { shouldAllowDevOrigins } from '../../api/auth/_helpers.js'
 import { resetMemoryRateLimitStore } from '../../api/auth/_ratelimit.js'
 
 type MockRequest = {
@@ -83,6 +84,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
   const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
   const originalCloudSave = process.env.CLOUD_SAVE_ENABLED
   const originalVercelEnv = process.env.VERCEL_ENV
+  const originalVercel = process.env.VERCEL
+  const originalNodeEnv = process.env.NODE_ENV
 
   beforeEach(() => {
     resetMemoryRateLimitStore()
@@ -92,6 +95,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
     delete process.env.UPSTASH_REDIS_REST_TOKEN
     delete process.env.CLOUD_SAVE_ENABLED
     delete process.env.VERCEL_ENV
+    delete process.env.VERCEL
   })
 
   afterEach(() => {
@@ -133,6 +137,18 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       delete process.env.VERCEL_ENV
     } else {
       process.env.VERCEL_ENV = originalVercelEnv
+    }
+
+    if (originalVercel === undefined) {
+      delete process.env.VERCEL
+    } else {
+      process.env.VERCEL = originalVercel
+    }
+
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV
+    } else {
+      process.env.NODE_ENV = originalNodeEnv
     }
   })
 
@@ -230,7 +246,10 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
 
       const req = createMockReq({
         method: 'POST',
-        headers: { origin: 'https://yundev.space' },
+        headers: {
+          origin: 'https://yundev.space',
+          'content-type': 'application/json',
+        },
         body: {
           access_token: accessToken,
           refresh_token: refreshToken,
@@ -263,7 +282,10 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
 
       const req = createMockReq({
         method: 'POST',
-        headers: { origin: 'https://yundev.space' },
+        headers: {
+          origin: 'https://yundev.space',
+          'content-type': 'application/json',
+        },
         body: {
           access_token: 'bad-access-token',
           refresh_token: 'some-refresh-token',
@@ -284,7 +306,10 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
 
       const req = createMockReq({
         method: 'POST',
-        headers: { origin: 'https://yundev.space' },
+        headers: {
+          origin: 'https://yundev.space',
+          'content-type': 'application/json',
+        },
         body: {
           access_token: 'bad; HttpOnly',
           refresh_token: 'valid-refresh',
@@ -297,6 +322,52 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       expect(res.statusCode).toBe(401)
       expect(res.body).toEqual({ ok: false, error: 'invalid_token' })
       expect(res.getHeader('set-cookie')).toBeUndefined()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('rejects non-JSON content-type with 415 and missing/disallowed origin with 403 before Supabase (S8)', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      // text/plain -> 415
+      const textReq = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://yundev.space',
+          'content-type': 'text/plain',
+        },
+        body: JSON.stringify({ access_token: 'tok', refresh_token: 'ref' }),
+      })
+      const textRes = createMockRes()
+      await sessionHandler(textReq, textRes)
+      expect(textRes.statusCode).toBe(415)
+      expect(textRes.body).toEqual({ ok: false, error: 'unsupported_media_type' })
+
+      // missing origin -> 403
+      const noOriginReq = createMockReq({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { access_token: 'tok', refresh_token: 'ref' },
+      })
+      const noOriginRes = createMockRes()
+      await sessionHandler(noOriginReq, noOriginRes)
+      expect(noOriginRes.statusCode).toBe(403)
+      expect(noOriginRes.body).toEqual({ ok: false, error: 'origin_not_allowed' })
+
+      // bad origin -> 403
+      const badOriginReq = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://evil.example',
+          'content-type': 'application/json',
+        },
+        body: { access_token: 'tok', refresh_token: 'ref' },
+      })
+      const badOriginRes = createMockRes()
+      await sessionHandler(badOriginReq, badOriginRes)
+      expect(badOriginRes.statusCode).toBe(403)
+      expect(badOriginRes.body).toEqual({ ok: false, error: 'origin_not_allowed' })
+
       expect(fetchMock).not.toHaveBeenCalled()
     })
   })
@@ -546,6 +617,43 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       await configHandler(okReq, okRes)
       expect(okRes.getHeader('access-control-allow-origin')).toBe('https://ivf-journey.yundev.space')
     })
+
+    it('treats missing VERCEL_ENV as production on Vercel and fails closed for dev origins (S4)', async () => {
+      const cases: Array<{
+        vercelEnv: string | undefined
+        vercel: string | undefined
+        nodeEnv: string | undefined
+        expected: boolean
+      }> = [
+        { vercelEnv: 'development', vercel: undefined, nodeEnv: 'test', expected: true },
+        { vercelEnv: undefined, vercel: undefined, nodeEnv: 'test', expected: true },
+        { vercelEnv: undefined, vercel: '1', nodeEnv: 'test', expected: false },
+        { vercelEnv: 'preview', vercel: '1', nodeEnv: 'test', expected: false },
+        { vercelEnv: 'production', vercel: '1', nodeEnv: 'production', expected: false },
+        { vercelEnv: 'development', vercel: undefined, nodeEnv: 'production', expected: false },
+      ]
+
+      for (const c of cases) {
+        if (c.vercelEnv === undefined) delete process.env.VERCEL_ENV
+        else process.env.VERCEL_ENV = c.vercelEnv
+        if (c.vercel === undefined) delete process.env.VERCEL
+        else process.env.VERCEL = c.vercel
+        if (c.nodeEnv === undefined) delete process.env.NODE_ENV
+        else process.env.NODE_ENV = c.nodeEnv
+
+        expect(shouldAllowDevOrigins()).toBe(c.expected)
+
+        const req = createMockReq({
+          method: 'OPTIONS',
+          headers: { origin: 'http://localhost:5173' },
+        })
+        const res = createMockRes()
+        await configHandler(req, res)
+        expect(res.getHeader('access-control-allow-origin')).toBe(
+          c.expected ? 'http://localhost:5173' : 'https://yundev.space',
+        )
+      }
+    })
   })
 
   describe('POST /api/auth/refresh', () => {
@@ -699,6 +807,95 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       expect(res.body).toEqual({ ok: false, error: 'auth_upstream_error' })
       expect(res.getHeader('set-cookie')).toBeUndefined()
     })
+
+    it('returns 401 refresh_failed when sb_refresh cookie is absent (S6)', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(401)
+      expect(res.body).toEqual({ ok: false, error: 'refresh_failed' })
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('returns 502 and leaves cookies untouched on Supabase 401 or non-refresh 400 (S5)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'Invalid API key' }), { status: 401 }))
+          .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'validation_failed' }), { status: 400 })),
+      )
+
+      for (let i = 0; i < 2; i += 1) {
+        const req = createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://www.yundev.space',
+            cookie: `sb_refresh=old-refresh; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+        })
+        const res = createMockRes()
+        await refreshHandler(req, res)
+
+        expect(res.statusCode).toBe(502)
+        expect(res.body).toEqual({ ok: false, error: 'auth_upstream_error' })
+        expect(res.getHeader('set-cookie')).toBeUndefined()
+      }
+    })
+
+    it('falls back to validateSupabaseAccessToken when refresh payload omits user (S6)', async () => {
+      const newAccess = createFakeJwt({ sub: 'user-fb', exp: Math.floor(Date.now() / 1000) + 3600 })
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ access_token: newAccess, refresh_token: 'new-ref-fb' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ id: 'user-fb', email: 'fb@yundev.space' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const req = createMockReq({
+        method: 'POST',
+        headers: {
+          origin: 'https://www.yundev.space',
+          cookie: `sb_refresh=old-refresh; csrf=${validCsrf}`,
+          'x-csrf-token': validCsrf,
+        },
+      })
+      const res = createMockRes()
+      await refreshHandler(req, res)
+
+      expect(res.statusCode).toBe(200)
+      expect(res.body).toEqual({
+        ok: true,
+        user: {
+          id: 'user-fb',
+          email: 'fb@yundev.space',
+          display_name: null,
+          avatar_url: null,
+        },
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('Rate limiting', () => {
@@ -708,7 +905,11 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       for (let i = 0; i < 10; i += 1) {
         const req = createMockReq({
           method: 'POST',
-          headers: { 'x-forwarded-for': '203.0.113.9' },
+          headers: {
+            'x-forwarded-for': '203.0.113.9',
+            origin: 'https://yundev.space',
+            'content-type': 'application/json',
+          },
           body: {},
         })
         const res = createMockRes()
@@ -718,7 +919,11 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
 
       const blockedReq = createMockReq({
         method: 'POST',
-        headers: { 'x-forwarded-for': '203.0.113.9' },
+        headers: {
+          'x-forwarded-for': '203.0.113.9',
+          origin: 'https://yundev.space',
+          'content-type': 'application/json',
+        },
         body: {},
       })
       const blockedRes = createMockRes()
@@ -736,7 +941,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(
-          new Response(JSON.stringify([{ result: 31 }, { result: 1 }]), {
+          new Response(JSON.stringify([{ result: 31 }, { result: 1 }, { result: 42500 }]), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
@@ -761,6 +966,7 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
         }),
       )
       expect(blockedRes.statusCode).toBe(429)
+      expect(blockedRes.getHeader('retry-after')).toBe('43')
       expect(blockedRes.body).toEqual({ ok: false, error: 'rate_limited' })
 
       const fallbackReq = createMockReq({
@@ -772,6 +978,79 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
 
       expect(fallbackRes.statusCode).toBe(403)
       expect(fallbackRes.body).toEqual({ ok: false, error: 'csrf_mismatch' })
+    })
+
+    it('falls back to memory on Upstash EXPIRE error, missing/negative PTTL, or timeout/abort (S3)', async () => {
+      process.env.UPSTASH_REDIS_REST_URL = 'https://redis.upstash.test'
+      process.env.UPSTASH_REDIS_REST_TOKEN = 'upstash-test-token'
+
+      const fetchMock = vi
+        .fn()
+        // 1. EXPIRE error
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([{ result: 31 }, { error: 'ERR expire' }, { result: 5000 }]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+        // 2. PTTL -1
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([{ result: 31 }, { result: 1 }, { result: -1 }]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+        // 3. Timeout/AbortError
+        .mockRejectedValueOnce(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+      vi.stubGlobal('fetch', fetchMock)
+
+      for (const ip of ['198.51.100.10', '198.51.100.11', '198.51.100.12']) {
+        const req = createMockReq({
+          method: 'POST',
+          headers: { 'x-real-ip': ip },
+        })
+        const res = createMockRes()
+        await logoutHandler(req, res)
+        expect(res.statusCode).toBe(403)
+        expect(res.body).toEqual({ ok: false, error: 'csrf_mismatch' })
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+
+    it('warns once in production when Upstash env vars are missing, and does not warn in dev/test', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.stubGlobal('fetch', vi.fn())
+
+      // 1. Local dev/test (VERCEL_ENV undefined, VERCEL undefined, NODE_ENV !== production) -> no warning
+      for (let i = 0; i < 3; i += 1) {
+        const req = createMockReq({
+          method: 'POST',
+          headers: { 'x-real-ip': '198.51.100.30' },
+        })
+        const res = createMockRes()
+        await logoutHandler(req, res)
+        expect(res.statusCode).toBe(403)
+      }
+      expect(warnSpy).not.toHaveBeenCalled()
+
+      // 2. Production without Upstash env vars -> emits console.warn once across multiple calls
+      process.env.VERCEL = '1'
+      process.env.VERCEL_ENV = 'production'
+      for (let i = 0; i < 3; i += 1) {
+        const req = createMockReq({
+          method: 'POST',
+          headers: { 'x-real-ip': '198.51.100.31' },
+        })
+        const res = createMockRes()
+        await logoutHandler(req, res)
+        expect(res.statusCode).toBe(403)
+      }
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      const msg = String(warnSpy.mock.calls[0]?.[0] ?? '')
+      expect(msg).toContain('[ratelimit]')
+      expect(msg).not.toContain(TEST_SUPABASE_URL)
+      expect(msg).not.toContain(TEST_SUPABASE_ANON_KEY)
+      expect(msg).not.toContain('http')
     })
   })
 
@@ -847,6 +1126,61 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
           avatar_url: null,
         },
       })
+    })
+
+    it('returns 403 on missing/mismatched CSRF, 401 without sb_access, and 401 on upstream 401 (S6)', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 401 }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      // 403 missing CSRF
+      const noCsrfRes = createMockRes()
+      await profileHandler(
+        createMockReq({
+          method: 'POST',
+          headers: { origin: 'https://www.yundev.space', cookie: `sb_access=tok; csrf=${validCsrf}` },
+          body: { display_name: 'Yun' },
+        }),
+        noCsrfRes,
+      )
+      expect(noCsrfRes.statusCode).toBe(403)
+      expect(noCsrfRes.body).toEqual({ ok: false, error: 'csrf_mismatch' })
+
+      // 401 missing sb_access
+      const noAccessRes = createMockRes()
+      await profileHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://www.yundev.space',
+            cookie: `csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+          body: { display_name: 'Yun' },
+        }),
+        noAccessRes,
+      )
+      expect(noAccessRes.statusCode).toBe(401)
+      expect(noAccessRes.body).toEqual({ ok: false, error: 'unauthorized' })
+      expect(fetchMock).not.toHaveBeenCalled()
+
+      // upstream 401 -> 401
+      const upstream401Res = createMockRes()
+      await profileHandler(
+        createMockReq({
+          method: 'POST',
+          headers: {
+            origin: 'https://www.yundev.space',
+            cookie: `sb_access=expired-tok; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+          body: { display_name: 'Yun' },
+        }),
+        upstream401Res,
+      )
+      expect(upstream401Res.statusCode).toBe(401)
+      expect(upstream401Res.body).toEqual({ ok: false, error: 'unauthorized' })
     })
   })
 
@@ -970,6 +1304,150 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       await saveHandler(bigReq, bigRes)
       expect(bigRes.statusCode).toBe(413)
       expect(bigRes.body).toEqual({ ok: false, error: 'payload_too_large' })
+    })
+
+    it('returns 401 without sb_access cookie and 502 on GET upstream failure (S6)', async () => {
+      process.env.CLOUD_SAVE_ENABLED = 'true'
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 'user-save', email: 'save@yundev.space' }), { status: 200 }),
+        )
+        .mockResolvedValueOnce(new Response('bad gateway', { status: 500 }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const unauthRes = createMockRes()
+      await saveHandler(
+        createMockReq({
+          method: 'GET',
+          headers: { origin: 'https://vang-vong-su-viet.yundev.space' },
+          query: { game: 'vang-vong', slot: '0' },
+        }),
+        unauthRes,
+      )
+      expect(unauthRes.statusCode).toBe(401)
+      expect(unauthRes.body).toEqual({ ok: false, error: 'unauthorized' })
+      expect(fetchMock).not.toHaveBeenCalled()
+
+      const upstreamErrRes = createMockRes()
+      await saveHandler(
+        createMockReq({
+          method: 'GET',
+          headers: {
+            origin: 'https://vang-vong-su-viet.yundev.space',
+            cookie: 'sb_access=tok',
+          },
+          query: { game: 'vang-vong', slot: '0' },
+        }),
+        upstreamErrRes,
+      )
+      expect(upstreamErrRes.statusCode).toBe(502)
+      expect(upstreamErrRes.body).toEqual({ ok: false, error: 'upstream_error' })
+    })
+
+    it('enforces exact 65536-byte boundary, 70000-byte content-length guard, and per-IP rate limit (S1, S2)', async () => {
+      process.env.CLOUD_SAVE_ENABLED = 'true'
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 'user-boundary', email: 'b@yundev.space' }), { status: 200 }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([{ updated_at: '2026-11-25T02:00:00Z' }]), { status: 201 }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 'user-boundary', email: 'b@yundev.space' }), { status: 200 }),
+        )
+      vi.stubGlobal('fetch', fetchMock)
+
+      // 1. content-length > 70000 -> 413 with zero fetch calls
+      const clRes = createMockRes()
+      await saveHandler(
+        createMockReq({
+          method: 'PUT',
+          headers: {
+            'x-forwarded-for': '203.0.113.50',
+            'content-length': '70001',
+            cookie: `sb_access=tok; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+          query: { game: 'vang-vong', slot: '0' },
+          body: { data: { k: 'v' }, version: 0 },
+        }),
+        clRes,
+      )
+      expect(clRes.statusCode).toBe(413)
+      expect(clRes.body).toEqual({ ok: false, error: 'payload_too_large' })
+      expect(fetchMock).not.toHaveBeenCalled()
+
+      // 2. Exactly 65536 UTF-8 bytes -> accepted (200)
+      const exactPrefix = '{"b":"'
+      const exactSuffix = '"}'
+      const exactBlob = 'a'.repeat(65536 - exactPrefix.length - exactSuffix.length)
+      const exactData = { b: exactBlob }
+      expect(Buffer.byteLength(JSON.stringify(exactData), 'utf8')).toBe(65536)
+
+      const exactRes = createMockRes()
+      await saveHandler(
+        createMockReq({
+          method: 'PUT',
+          headers: {
+            'x-forwarded-for': '203.0.113.51',
+            cookie: `sb_access=tok; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+          query: { game: 'vang-vong', slot: '0' },
+          body: { data: exactData, version: 0 },
+        }),
+        exactRes,
+      )
+      expect(exactRes.statusCode).toBe(200)
+      expect(exactRes.body).toEqual({ ok: true, updated_at: '2026-11-25T02:00:00Z' })
+
+      // 3. 65537 UTF-8 bytes -> 413
+      const overData = { b: `${exactBlob}x` }
+      expect(Buffer.byteLength(JSON.stringify(overData), 'utf8')).toBe(65537)
+      const overRes = createMockRes()
+      await saveHandler(
+        createMockReq({
+          method: 'PUT',
+          headers: {
+            'x-forwarded-for': '203.0.113.52',
+            cookie: `sb_access=tok; csrf=${validCsrf}`,
+            'x-csrf-token': validCsrf,
+          },
+          query: { game: 'vang-vong', slot: '0' },
+          body: { data: overData, version: 0 },
+        }),
+        overRes,
+      )
+      expect(overRes.statusCode).toBe(413)
+      expect(overRes.body).toEqual({ ok: false, error: 'payload_too_large' })
+
+      // 4. Per-IP limit (save-ip, 120/60s) blocks before validateSupabaseAccessToken
+      fetchMock.mockClear()
+      for (let i = 0; i < 120; i += 1) {
+        const res = createMockRes()
+        await saveHandler(
+          createMockReq({
+            method: 'PUT',
+            headers: { 'x-forwarded-for': '203.0.113.99' },
+          }),
+          res,
+        )
+        expect(res.statusCode).toBe(401)
+      }
+      const ipBlockedRes = createMockRes()
+      await saveHandler(
+        createMockReq({
+          method: 'PUT',
+          headers: { 'x-forwarded-for': '203.0.113.99' },
+        }),
+        ipBlockedRes,
+      )
+      expect(ipBlockedRes.statusCode).toBe(429)
+      expect(ipBlockedRes.body).toEqual({ ok: false, error: 'rate_limited' })
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 })

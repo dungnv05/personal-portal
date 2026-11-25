@@ -59,6 +59,7 @@ function App() {
 
   const headerRef = useRef<YunHeader | null>(null)
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null)
+  const [authResolved, setAuthResolved] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(
     () => nextHintHost !== null || authParam === 'signin' || authParam === 'signup',
   )
@@ -112,6 +113,7 @@ function App() {
       void getSessionUser().then((user) => {
         if (active) {
           setCurrentUser(user)
+          setAuthResolved(true)
         }
       })
     }
@@ -156,11 +158,12 @@ function App() {
 
     const onAuthChange = (event: Event) => {
       const detail = (event as CustomEvent<YunHeaderAuthChangeDetail>).detail
+      setAuthResolved(true)
       if (detail?.user) {
         setCurrentUser({
           id: detail.user.id,
           email: detail.user.email,
-          display_name: detail.user.displayName,
+          display_name: detail.user.rawDisplayName ?? null,
           avatar_url: detail.user.avatarUrl,
         })
       } else {
@@ -339,6 +342,7 @@ function App() {
           {isProfileView && (
             <ProfilePage
               user={currentUser}
+              authResolved={authResolved}
               onOpenSignIn={openSignInModal}
               onUserUpdated={setCurrentUser}
             />

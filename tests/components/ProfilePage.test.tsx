@@ -11,6 +11,13 @@ describe('ProfilePage', () => {
     document.body.innerHTML = ''
   })
 
+  it('renders loading status while auth is not yet resolved (S7a)', () => {
+    render(<ProfilePage user={null} authResolved={false} onOpenSignIn={vi.fn()} />)
+
+    expect(screen.getByRole('status').textContent).toBe('Đang tải hồ sơ…')
+    expect(screen.queryByText('Vui lòng đăng nhập để xem hồ sơ của bạn.')).toBeNull()
+  })
+
   it('renders signed-out prompt and opens sign-in modal on click', () => {
     const onOpenSignIn = vi.fn()
     render(<ProfilePage user={null} onOpenSignIn={onOpenSignIn} />)
@@ -112,5 +119,91 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe('Không lưu được, thử lại.')
     })
+  })
+
+  it('retries profile save once after 401 via /api/auth/refresh (S7b)', async () => {
+    document.cookie = 'csrf=csrf-initial; path=/'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockImplementationOnce(async () => {
+        document.cookie = 'csrf=csrf-rotated; path=/'
+        return new Response(JSON.stringify({ ok: true, user: { id: 'user-1', email: 'yun@yundev.space' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      })
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            user: { id: 'user-1', email: 'yun@yundev.space', display_name: 'Retried Name', avatar_url: null },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <ProfilePage
+        user={{ id: 'user-1', email: 'yun@yundev.space', display_name: null }}
+        onOpenSignIn={vi.fn()}
+      />,
+    )
+
+    const input = screen.getByLabelText('Tên hiển thị')
+    fireEvent.change(input, { target: { value: 'Retried Name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent).toBe('Đã lưu.')
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/auth/refresh',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'x-csrf-token': 'csrf-initial' },
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/auth/profile',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': 'csrf-rotated',
+        },
+      }),
+    )
+  })
+
+  it('prefills empty input with email local part placeholder when display_name is null and does not save fallback (S7c)', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <ProfilePage
+        user={{ id: 'user-1', email: 'yun@yundev.space', display_name: null }}
+        onOpenSignIn={vi.fn()}
+      />,
+    )
+
+    const input = screen.getByLabelText('Tên hiển thị') as HTMLInputElement
+    expect(input.value).toBe('')
+    expect(input.placeholder).toBe('yun')
+
+    const form = input.closest('form')!
+    fireEvent.submit(form)
+    expect(screen.getByRole('alert').textContent).toBe('Không lưu được, thử lại.')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

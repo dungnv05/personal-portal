@@ -34,8 +34,8 @@ export const LEGACY_STORAGE_KEYS = [
 const CSRF_COOKIE_NAME = 'csrf'
 
 const env = import.meta.env as Record<string, string | undefined>
-const rawUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL || ''
-const rawKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || ''
+const rawUrl = env.VITE_SUPABASE_URL || ''
+const rawKey = env.VITE_SUPABASE_ANON_KEY || ''
 
 const isDummyUrl =
   !rawUrl || rawUrl.includes('your-project') || rawUrl.includes('abcdefghijklmnopqrst')
@@ -379,27 +379,45 @@ export type UpdateProfileResult = {
   error: Error | null
 }
 
+async function postProfileDisplayName(name: string): Promise<Response> {
+  const csrfToken = getCsrfToken()
+  return fetch('/api/auth/profile', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-csrf-token': csrfToken,
+    },
+    body: JSON.stringify({ display_name: name }),
+  })
+}
+
 export async function updateDisplayName(name: string): Promise<UpdateProfileResult> {
   if (typeof fetch !== 'function') {
     return { user: null, error: new Error('Fetch unavailable.') }
   }
 
-  const csrfToken = getCsrfToken()
   let response: Response
   try {
-    response = await fetch('/api/auth/profile', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-csrf-token': csrfToken,
-      },
-      body: JSON.stringify({ display_name: name }),
-    })
+    response = await postProfileDisplayName(name)
   } catch (err: unknown) {
     return {
       user: null,
       error: toError(err, 'Failed to update profile.'),
+    }
+  }
+
+  if (response.status === 401 && getCsrfToken()) {
+    const refreshed = await tryRefreshSession()
+    if (refreshed) {
+      try {
+        response = await postProfileDisplayName(name)
+      } catch (err: unknown) {
+        return {
+          user: null,
+          error: toError(err, 'Failed to update profile.'),
+        }
+      }
     }
   }
 
