@@ -25,8 +25,7 @@ let scriptLoadPromise: Promise<void> | null = null
 let loggedMissingSiteKey = false
 
 export function getTurnstileSiteKey(): string {
-  const env = import.meta.env as Record<string, string | undefined>
-  const raw = env.VITE_TURNSTILE_SITE_KEY
+  const raw: unknown = import.meta.env.VITE_TURNSTILE_SITE_KEY
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
