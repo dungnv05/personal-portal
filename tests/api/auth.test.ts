@@ -104,6 +104,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
   const originalSupabaseAnonKey = process.env.SUPABASE_ANON_KEY
   const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
   const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  const originalKvUrl = process.env.KV_REST_API_URL
+  const originalKvToken = process.env.KV_REST_API_TOKEN
   const originalCloudSave = process.env.CLOUD_SAVE_ENABLED
   const originalVercelEnv = process.env.VERCEL_ENV
   const originalVercel = process.env.VERCEL
@@ -115,6 +117,8 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
     process.env.SUPABASE_ANON_KEY = TEST_SUPABASE_ANON_KEY
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.KV_REST_API_URL
+    delete process.env.KV_REST_API_TOKEN
     delete process.env.CLOUD_SAVE_ENABLED
     delete process.env.VERCEL_ENV
     delete process.env.VERCEL
@@ -147,6 +151,18 @@ describe('serverless auth endpoints (/api/auth/*)', () => {
       delete process.env.UPSTASH_REDIS_REST_TOKEN
     } else {
       process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken
+    }
+
+    if (originalKvUrl === undefined) {
+      delete process.env.KV_REST_API_URL
+    } else {
+      process.env.KV_REST_API_URL = originalKvUrl
+    }
+
+    if (originalKvToken === undefined) {
+      delete process.env.KV_REST_API_TOKEN
+    } else {
+      process.env.KV_REST_API_TOKEN = originalKvToken
     }
 
     if (originalCloudSave === undefined) {

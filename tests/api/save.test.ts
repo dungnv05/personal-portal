@@ -143,6 +143,8 @@ describe('GET / PUT / POST /api/save', () => {
   const originalSupabaseAnonKey = process.env.SUPABASE_ANON_KEY
   const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
   const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  const originalKvUrl = process.env.KV_REST_API_URL
+  const originalKvToken = process.env.KV_REST_API_TOKEN
   const originalCloudSave = process.env.CLOUD_SAVE_ENABLED
   const originalExcludedIds = process.env.CLOUD_SAVE_IMPORT_EXCLUDED_USER_IDS
   const originalVercelEnv = process.env.VERCEL_ENV
@@ -156,6 +158,8 @@ describe('GET / PUT / POST /api/save', () => {
     process.env.CLOUD_SAVE_ENABLED = 'true'
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.KV_REST_API_URL
+    delete process.env.KV_REST_API_TOKEN
     delete process.env.CLOUD_SAVE_IMPORT_EXCLUDED_USER_IDS
     delete process.env.VERCEL_ENV
     delete process.env.VERCEL
@@ -178,6 +182,8 @@ describe('GET / PUT / POST /api/save', () => {
     restore('SUPABASE_ANON_KEY', originalSupabaseAnonKey)
     restore('UPSTASH_REDIS_REST_URL', originalUpstashUrl)
     restore('UPSTASH_REDIS_REST_TOKEN', originalUpstashToken)
+    restore('KV_REST_API_URL', originalKvUrl)
+    restore('KV_REST_API_TOKEN', originalKvToken)
     restore('CLOUD_SAVE_ENABLED', originalCloudSave)
     restore('CLOUD_SAVE_IMPORT_EXCLUDED_USER_IDS', originalExcludedIds)
     restore('VERCEL_ENV', originalVercelEnv)
