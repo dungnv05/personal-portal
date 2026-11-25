@@ -76,8 +76,11 @@ import App from '../src/App'
 type RenderedCard = {
   name: string
   description: string
+  statusText: string
+  statusElement: HTMLElement | null
   url: string
   linkElement: HTMLAnchorElement | null
+  element: HTMLElement
 }
 
 function readRenderedCards(container: HTMLElement): RenderedCard[] {
@@ -85,12 +88,16 @@ function readRenderedCards(container: HTMLElement): RenderedCard[] {
   return cardNodes.map((card) => {
     const heading = card.querySelector<HTMLElement>('h3')
     const description = card.querySelector<HTMLElement>('p')
+    const statusElement = card.querySelector<HTMLElement>('.app-status')
     const link = card.querySelector<HTMLAnchorElement>('a[href]')
     return {
       name: heading?.textContent?.trim() ?? '',
       description: description?.textContent?.trim() ?? '',
+      statusText: statusElement?.textContent?.trim() ?? '',
+      statusElement,
       url: link?.getAttribute('href')?.trim() ?? '',
       linkElement: link,
+      element: card,
     }
   })
 }
@@ -109,7 +116,7 @@ describe('Portal app cards', () => {
     expect(cards.length).toBeGreaterThanOrEqual(5)
   })
 
-  it('gives every card a non-empty name, description, and url', () => {
+  it('gives every card a non-empty name and description, and launchable cards an https url', () => {
     const { container } = render(<App />)
     const cards = readRenderedCards(container)
 
@@ -117,26 +124,75 @@ describe('Portal app cards', () => {
     for (const card of cards) {
       expect(card.name.length).toBeGreaterThan(0)
       expect(card.description.length).toBeGreaterThan(0)
-      expect(card.url.length).toBeGreaterThan(0)
-      expect(card.url).toMatch(/^https:\/\//)
+      if (card.linkElement) {
+        expect(card.url.length).toBeGreaterThan(0)
+        expect(card.url).toMatch(/^https:\/\//)
+      } else {
+        expect(card.element).toHaveClass('app-card-disabled')
+      }
     }
   })
 
-  it('assigns a unique url to every card', () => {
+  it('assigns a unique url to every launchable card', () => {
     const { container } = render(<App />)
-    const urls = readRenderedCards(container).map((card) => card.url)
+    const urls = readRenderedCards(container)
+      .filter((card) => card.linkElement !== null)
+      .map((card) => card.url)
 
+    expect(urls.length).toBeGreaterThan(0)
     expect(new Set(urls).size).toBe(urls.length)
   })
 
-  it('includes a card linking to https://brse.yundev.space', () => {
+  it('renders Vang Vọng Sử Việt as non-clickable In Dev after all Active and Beta cards', () => {
+    const { container, queryByRole } = render(<App />)
+    const cards = readRenderedCards(container)
+
+    expect(queryByRole('link', { name: /vang-vong/i })).toBeNull()
+    expect(container.querySelector('[href*="vang-vong-su-viet"]')).toBeNull()
+
+    const vangVongIndex = cards.findIndex((card) => card.name === 'Vang Vọng Sử Việt')
+    expect(vangVongIndex).toBeGreaterThan(-1)
+
+    const vangVongCard = cards[vangVongIndex]
+    expect(vangVongCard.linkElement).toBeNull()
+    expect(vangVongCard.element).toHaveClass('app-card-disabled')
+
+    const disabledAction = vangVongCard.element.querySelector<HTMLElement>('[aria-disabled="true"]')
+    expect(disabledAction).not.toBeNull()
+    expect(disabledAction).toHaveTextContent('Đang phát triển')
+    expect(disabledAction).toHaveAttribute('aria-disabled', 'true')
+    expect(disabledAction).not.toHaveAttribute('tabindex')
+
+    const lastLaunchableIndex = cards.reduce(
+      (lastIdx, card, idx) =>
+        card.statusText === 'Active' || card.statusText === 'Beta' ? idx : lastIdx,
+      -1,
+    )
+    expect(lastLaunchableIndex).toBeGreaterThan(-1)
+    expect(vangVongIndex).toBeGreaterThan(lastLaunchableIndex)
+  })
+
+  it('renders PM / BrSE Track with Beta badge and link to https://brse.yundev.space', () => {
     const { container } = render(<App />)
     const cards = readRenderedCards(container)
     const brseCard = cards.find((card) => card.url === 'https://brse.yundev.space')
 
     expect(brseCard).toBeDefined()
+    expect(brseCard?.statusElement).toHaveClass('status-beta')
+    expect(brseCard?.statusText).toBe('Beta')
     expect(brseCard?.linkElement).toBeInTheDocument()
     expect(brseCard?.linkElement).toHaveAttribute('href', 'https://brse.yundev.space')
+  })
+
+  it('links Active cards (e.g. SalaryFlow) with target _blank', () => {
+    const { container } = render(<App />)
+    const cards = readRenderedCards(container)
+    const salaryFlowCard = cards.find((card) => card.name === 'SalaryFlow')
+
+    expect(salaryFlowCard).toBeDefined()
+    expect(salaryFlowCard?.statusText).toBe('Active')
+    expect(salaryFlowCard?.linkElement).toHaveAttribute('target', '_blank')
+    expect(salaryFlowCard?.linkElement).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
   it('renders app cards under the Supabase mock without attempting real network calls', () => {

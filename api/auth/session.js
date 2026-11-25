@@ -1,13 +1,17 @@
+import { isAllowedOrigin } from '../../shared/allowed-origins.js';
 import {
   REFRESH_MAX_AGE,
   applyCors,
   computeAccessMaxAge,
   generateCsrfToken,
+  getHeader,
+  isSessionPastAbsoluteCap,
   isValidCookieToken,
-  parseJsonBody,
   serializeCookie,
+  shouldAllowDevOrigins,
   validateSupabaseAccessToken,
 } from './_helpers.js';
+import { rateLimit } from './_ratelimit.js';
 
 /**
  * POST /api/auth/session
@@ -27,7 +31,21 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
   }
 
-  const body = parseJsonBody(req.body);
+  if (await rateLimit(req, res, { bucket: 'session', limit: 10, windowSec: 60 })) {
+    return;
+  }
+
+  const origin = getHeader(req, 'origin').trim();
+  if (!isAllowedOrigin(origin, { allowDev: shouldAllowDevOrigins() })) {
+    return res.status(403).json({ ok: false, error: 'origin_not_allowed' });
+  }
+
+  const contentType = getHeader(req, 'content-type').trim().toLowerCase();
+  if (!contentType.startsWith('application/json')) {
+    return res.status(415).json({ ok: false, error: 'unsupported_media_type' });
+  }
+
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
   const accessToken = typeof body?.access_token === 'string' ? body.access_token.trim() : '';
   const refreshToken = typeof body?.refresh_token === 'string' ? body.refresh_token.trim() : '';
 
@@ -49,6 +67,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false, error: 'invalid_token' });
   }
 
+  if (isSessionPastAbsoluteCap(accessToken)) {
+    return res.status(401).json({ ok: false, error: 'session_expired' });
+  }
+
   const accessMaxAge = computeAccessMaxAge(accessToken);
   const csrfToken = generateCsrfToken();
 
@@ -60,9 +82,6 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     ok: true,
-    user: {
-      id: verification.user.id,
-      email: verification.user.email,
-    },
+    user: verification.user,
   });
 }

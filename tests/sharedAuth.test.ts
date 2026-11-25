@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { __resetRefreshCoordinatorForTests } from '../src/shared-auth/refreshCoordinator'
+import type { YunHeader } from '../src/yun-header/index'
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js'
 
 const LEGACY_SESSION_KEY = 'yundev_session'
@@ -168,9 +170,64 @@ async function loadSharedAuth() {
 }
 
 describe('sharedAuth (HttpOnly cookie flow)', () => {
+  it('page-load: <yun-header> and getSessionUser share a single /api/auth/refresh POST', async () => {
+    document.body.innerHTML = ''
+    document.cookie = 'csrf=csrf-page-load; path=/'
+
+    let refreshed = false
+    let refreshCalls = 0
+    const userPayload = {
+      id: 'user-pageload',
+      email: 'pageload@yundev.space',
+      display_name: 'Page Load',
+    }
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = getRequestUrl(input)
+      if (url.endsWith('/api/auth/me')) {
+        if (!refreshed) {
+          return jsonResponse({ ok: false }, 401)
+        }
+        return jsonResponse({ ok: true, user: userPayload }, 200)
+      }
+      if (url.endsWith('/api/auth/refresh')) {
+        refreshCalls += 1
+        refreshed = true
+        return jsonResponse({ ok: true, user: userPayload }, 200)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { defineYunHeader } = await import('../src/yun-header/index')
+    defineYunHeader()
+    const auth = await loadSharedAuth()
+
+    const header = document.createElement('yun-header') as YunHeader
+    header.setAttribute('auth-base', 'https://www.yundev.space')
+    document.body.appendChild(header)
+
+    const sessionUser = await auth.getSessionUser()
+    await vi.waitFor(() => {
+      expect(header.state).toBe('signed-in')
+    })
+
+    expect(refreshCalls).toBe(1)
+    expect(header.user?.id).toBe('user-pageload')
+    expect(sessionUser).toEqual({
+      id: 'user-pageload',
+      email: 'pageload@yundev.space',
+      display_name: 'Page Load',
+      avatar_url: null,
+    })
+
+    header.remove()
+    document.body.innerHTML = ''
+  })
   beforeEach(() => {
     setTestUrl('https://portal.yundev.space/')
     clearBrowserStorage()
+    __resetRefreshCoordinatorForTests()
     mockState.reset()
     vi.stubGlobal(
       'fetch',
@@ -180,6 +237,7 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
 
   afterEach(() => {
     clearBrowserStorage()
+    __resetRefreshCoordinatorForTests()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     mockState.reset()
@@ -220,7 +278,12 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
     const result = await auth.signInWithEmail('yun@yundev.space', 'secret-password')
 
     expect(result.error).toBeNull()
-    expect(result.data.user).toEqual({ id: 'user-123', email: 'yun@yundev.space' })
+    expect(result.data.user).toEqual({
+      id: 'user-123',
+      email: 'yun@yundev.space',
+      display_name: null,
+      avatar_url: null,
+    })
     expect(mockState.signInWithPassword).toHaveBeenCalledWith({
       email: 'yun@yundev.space',
       password: 'secret-password',
@@ -355,7 +418,12 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
 
     const user = await auth.getSessionUser()
 
-    expect(user).toEqual({ id: 'user-99', email: 'cookie@yundev.space' })
+    expect(user).toEqual({
+      id: 'user-99',
+      email: 'cookie@yundev.space',
+      display_name: null,
+      avatar_url: null,
+    })
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', {
       method: 'GET',
       credentials: 'include',
@@ -477,12 +545,120 @@ describe('sharedAuth (HttpOnly cookie flow)', () => {
     expect(signInRes.error).toBeNull()
 
     const sessionUser = await auth.getSessionUser()
-    expect(sessionUser).toEqual({ id: 'user-123', email: 'yun@yundev.space' })
+    expect(sessionUser).toEqual({
+      id: 'user-123',
+      email: 'yun@yundev.space',
+      display_name: null,
+      avatar_url: null,
+    })
 
     const logoutRes = await auth.logout()
     expect(logoutRes.error).toBeNull()
 
     expect(setItemSpy).not.toHaveBeenCalled()
     expect(localStorage.length).toBe(0)
+  })
+
+  it('getSessionUser refreshes once on 401 when csrf cookie exists (single-flight) and retries /api/auth/me', async () => {
+    document.cookie = 'csrf=csrf-single-flight; path=/'
+    let meCalls = 0
+    let refreshCalls = 0
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/me') {
+        meCalls += 1
+        if (meCalls <= 2) {
+          return jsonResponse({ ok: false }, 401)
+        }
+        return jsonResponse(
+          { ok: true, user: { id: 'user-sf', email: 'sf@yundev.space', display_name: 'SF' } },
+          200,
+        )
+      }
+      if (url === '/api/auth/refresh') {
+        refreshCalls += 1
+        return jsonResponse({ ok: true }, 200)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const auth = await loadSharedAuth()
+    const [u1, u2] = await Promise.all([auth.getSessionUser(), auth.getSessionUser()])
+
+    expect(refreshCalls).toBe(1)
+    expect(u1).toEqual({
+      id: 'user-sf',
+      email: 'sf@yundev.space',
+      display_name: 'SF',
+      avatar_url: null,
+    })
+    expect(u2).toEqual(u1)
+  })
+
+  it('getSessionUser does not refresh without csrf cookie and returns null without loop when refresh fails', async () => {
+    const auth = await loadSharedAuth()
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = getRequestUrl(input)
+      if (url === '/api/auth/me') {
+        return jsonResponse({ ok: false }, 401)
+      }
+      if (url === '/api/auth/refresh') {
+        return jsonResponse({ ok: false, error: 'refresh_failed' }, 401)
+      }
+      return jsonResponse({}, 200)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    // No csrf cookie -> no refresh call
+    expect(await auth.getSessionUser()).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    // With csrf cookie, refresh fails -> returns null, never loops
+    fetchMock.mockClear()
+    document.cookie = 'csrf=csrf-fail-tok; path=/'
+    expect(await auth.getSessionUser()).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('updateDisplayName sends x-csrf-token and JSON body, handles success and error', async () => {
+    document.cookie = 'csrf=csrf-upd-tok; path=/'
+    const auth = await loadSharedAuth()
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-1', email: 'yun@yundev.space', display_name: 'Yun New' },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'invalid_display_name' }, 400))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const okRes = await auth.updateDisplayName('Yun New')
+    expect(okRes.error).toBeNull()
+    expect(okRes.user).toEqual({
+      id: 'user-1',
+      email: 'yun@yundev.space',
+      display_name: 'Yun New',
+      avatar_url: null,
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/profile', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': 'csrf-upd-tok',
+      },
+      body: JSON.stringify({ display_name: 'Yun New' }),
+    })
+
+    const errRes = await auth.updateDisplayName('Bad')
+    expect(errRes.user).toBeNull()
+    expect(errRes.error?.message).toContain('400')
+    expect(errRes.error?.message).toContain('invalid_display_name')
   })
 })

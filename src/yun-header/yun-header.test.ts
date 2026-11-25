@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineYunHeader, isAllowedAuthOrigin, YunHeader } from './index'
+import { __resetRefreshCoordinatorForTests } from '../shared-auth/refreshCoordinator'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -46,6 +47,7 @@ describe('<yun-header>', () => {
 
   beforeEach(() => {
     document.body.innerHTML = ''
+    __resetRefreshCoordinatorForTests()
     document.cookie = 'csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
   })
 
@@ -506,6 +508,7 @@ describe('<yun-header>', () => {
 
     for (const badUrl of disallowed) {
       document.body.innerHTML = ''
+    __resetRefreshCoordinatorForTests()
       const fetchMock = vi.fn().mockResolvedValue(
         jsonResponse({
           ok: true,
@@ -550,6 +553,7 @@ describe('<yun-header>', () => {
 
     for (let i = 0; i < badProfileUrls.length; i += 1) {
       document.body.innerHTML = ''
+    __resetRefreshCoordinatorForTests()
       fetchMock.mockClear()
       const el = document.createElement('yun-header') as YunHeader
       el.setAttribute('auth-base', badAuthBases[i]!)
@@ -699,5 +703,79 @@ describe('<yun-header>', () => {
     const logoutNotice = el.shadowRoot!.querySelector('.yh-logout-notice')
     expect(expiredNotice?.hasAttribute('hidden')).toBe(true)
     expect(logoutNotice?.hasAttribute('hidden')).toBe(true)
+  })
+
+  it('refreshes once on 401 when csrf cookie exists, single-flight per element, and never loops', async () => {
+    document.cookie = 'csrf=csrf-refresh-tok; path=/'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-refreshed', email: 'refreshed@yundev.space', display_name: 'Refreshed' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-refreshed', email: 'refreshed@yundev.space', display_name: 'Refreshed' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('auth-base', 'https://www.yundev.space')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    expect(el.state).toBe('signed-in')
+    expect(el.user?.id).toBe('user-refreshed')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://www.yundev.space/api/auth/refresh',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'x-csrf-token': 'csrf-refresh-tok' },
+      }),
+    )
+
+    // If retried /me still returns 401, never loops
+    fetchMock.mockReset()
+    __resetRefreshCoordinatorForTests()
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
+      .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'refresh_failed' }, 401))
+
+    await el.refresh()
+    expect(el.state).toBe('expired')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('transitions out of loading and fires yh-auth-change when 3 s timeout fires while refresh POST is pending (M1)', async () => {
+    vi.useFakeTimers()
+    document.cookie = 'csrf=csrf-timeout-tok; path=/'
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
+      .mockImplementationOnce(() => new Promise<Response>(() => {}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('auth-base', 'https://www.yundev.space')
+    const authChangeSpy = vi.fn()
+    el.addEventListener('yh-auth-change', authChangeSpy)
+
+    document.body.appendChild(el)
+    await vi.advanceTimersByTimeAsync(3500)
+
+    expect(el.state).toBe('signed-out')
+    expect(el.state).not.toBe('loading')
+    expect(authChangeSpy).toHaveBeenCalledTimes(1)
+    const event = authChangeSpy.mock.calls[0]?.[0] as CustomEvent<{ state: string }> | undefined
+    expect(event?.detail.state).toBe('signed-out')
   })
 })

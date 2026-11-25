@@ -1,10 +1,12 @@
 import {
   applyCors,
   getHeader,
+  isSessionPastAbsoluteCap,
   isValidCookieToken,
   parseCookies,
   validateSupabaseAccessToken,
 } from './_helpers.js';
+import { rateLimit } from './_ratelimit.js';
 
 /**
  * GET /api/auth/me
@@ -24,6 +26,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
   }
 
+  if (await rateLimit(req, res, { bucket: 'me', limit: 120, windowSec: 60 })) {
+    return;
+  }
+
   const cookies = parseCookies(getHeader(req, 'cookie'));
   const accessToken = cookies.sb_access;
 
@@ -41,11 +47,12 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false });
   }
 
+  if (isSessionPastAbsoluteCap(accessToken)) {
+    return res.status(401).json({ ok: false, error: 'session_expired' });
+  }
+
   return res.status(200).json({
     ok: true,
-    user: {
-      id: verification.user.id,
-      email: verification.user.email,
-    },
+    user: verification.user,
   });
 }

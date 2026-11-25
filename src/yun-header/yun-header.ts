@@ -1,3 +1,6 @@
+import { isAllowedHost } from '../../shared/allowed-origins.js'
+import { sharedRefresh } from '../shared-auth/refreshCoordinator'
+
 export type YunHeaderApp = 'portal' | 'tinh-luong' | 'brse' | 'vang-vong' | 'ivf'
 export type YunHeaderVariant = 'bar' | 'overlay'
 export type YunHeaderState = 'loading' | 'signed-out' | 'signed-in' | 'expired' | 'error'
@@ -6,6 +9,7 @@ export interface YunHeaderUser {
   id: string
   email: string | null
   displayName: string
+  rawDisplayName: string | null
   avatarUrl: string | null
   initials: string
 }
@@ -548,7 +552,7 @@ export function isAllowedAuthOrigin(
     if (url.port !== '') {
       return false
     }
-    return host === 'yundev.space' || host.endsWith('.yundev.space')
+    return isAllowedHost(host)
   }
   if (url.protocol === 'http:') {
     if (!opts.allowLocalhost) {
@@ -647,6 +651,7 @@ function parseUserPayload(payload: unknown): YunHeaderUser | null {
     id,
     email,
     displayName,
+    rawDisplayName,
     avatarUrl,
     initials: computeInitials(displayName),
   }
@@ -869,14 +874,40 @@ export class YunHeader extends HTMLElement {
     this._loadingTimer = timerId
 
     try {
-      const response = await fetch(`${this.authBase}/api/auth/me`, {
+      let response = await fetch(`${this.authBase}/api/auth/me`, {
         method: 'GET',
         credentials: 'include',
         signal: controller.signal,
       })
 
       if (controller.signal.aborted) {
+        if (timedOut) {
+          throw new Error('Request timed out')
+        }
         return
+      }
+
+      if (response.status === 401 && readCsrfCookie()) {
+        const refreshed = await this._raceWithAbort(this._tryRefreshSession(), controller.signal)
+        if (controller.signal.aborted) {
+          if (timedOut) {
+            throw new Error('Request timed out')
+          }
+          return
+        }
+        if (refreshed) {
+          response = await fetch(`${this.authBase}/api/auth/me`, {
+            method: 'GET',
+            credentials: 'include',
+            signal: controller.signal,
+          })
+          if (controller.signal.aborted) {
+            if (timedOut) {
+              throw new Error('Request timed out')
+            }
+            return
+          }
+        }
       }
 
       if (response.status === 200) {
@@ -943,6 +974,33 @@ export class YunHeader extends HTMLElement {
 
     this._renderAccountRegions()
     this._dispatchAuthChange()
+  }
+
+  private _raceWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) {
+      return Promise.reject(new Error('Aborted'))
+    }
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        reject(new Error('Aborted'))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      promise.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort)
+          resolve(value)
+        },
+        (err: unknown) => {
+          signal.removeEventListener('abort', onAbort)
+          reject(err instanceof Error ? err : new Error('Refresh failed'))
+        },
+      )
+    })
+  }
+
+  private async _tryRefreshSession(): Promise<boolean> {
+    const outcome = await sharedRefresh(`${this.authBase}/api/auth/refresh`, readCsrfCookie)
+    return outcome !== 'failed'
   }
 
   private _applySignedOutOrExpired(wasSignedIn: boolean): void {
