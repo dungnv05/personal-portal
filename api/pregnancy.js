@@ -174,11 +174,15 @@ export default async function handler(req, res) {
     }
 
     const rawContentLength = getHeader(req, 'content-length').trim();
-    if (rawContentLength.length > 0) {
-      const contentLength = Number(rawContentLength);
-      if (Number.isFinite(contentLength) && contentLength > MAX_CONTENT_LENGTH_BYTES) {
-        return res.status(413).json({ ok: false, error: 'payload_too_large' });
-      }
+    if (rawContentLength.length === 0) {
+      return res.status(411).json({ ok: false, error: 'length_required' });
+    }
+    if (!/^\d+$/.test(rawContentLength)) {
+      return res.status(400).json({ ok: false, error: 'invalid_content_length' });
+    }
+    const contentLength = Number(rawContentLength);
+    if (contentLength > MAX_CONTENT_LENGTH_BYTES) {
+      return res.status(413).json({ ok: false, error: 'payload_too_large' });
     }
 
     const parsedBody = parseJsonBody(req.body);
@@ -199,6 +203,33 @@ export default async function handler(req, res) {
     const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || '').trim();
     if (!supabaseUrl || !supabaseAnonKey) {
       return res.status(500).json({ ok: false, error: 'server_misconfigured' });
+    }
+
+    if (parsedBody.dueDate === null) {
+      const deleteUrl = `${supabaseUrl}/rest/v1/pregnancy_profiles?user_id=eq.${encodeURIComponent(userId)}`;
+      let deleteResponse;
+      try {
+        deleteResponse = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers: buildUserHeaders(supabaseAnonKey, accessToken, {
+            Prefer: 'return=minimal',
+          }),
+        });
+      } catch {
+        console.warn('[pregnancy] PostgREST DELETE network error');
+        return res.status(502).json({ ok: false, error: 'storage_error' });
+      }
+
+      if (!deleteResponse.ok) {
+        console.warn('[pregnancy] PostgREST DELETE failed', deleteResponse.status);
+        return res.status(502).json({ ok: false, error: 'storage_error' });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        dueDate: null,
+        updatedAt: null,
+      });
     }
 
     const upsertUrl = `${supabaseUrl}/rest/v1/pregnancy_profiles?on_conflict=user_id`;

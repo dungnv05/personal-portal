@@ -1,4 +1,4 @@
--- supabase/migrations/20261125100000_pregnancy_profiles.sql
+-- supabase/migrations/20261125160000_pregnancy_profiles.sql
 -- NOT applied by bots. Yun applies after TA + Security OK. Safe to run twice (idempotent), single transaction.
 begin;
 

@@ -1,4 +1,4 @@
--- supabase/rollback/20261125100000_pregnancy_profiles_rollback.sql
+-- supabase/rollback/20261125160000_pregnancy_profiles_rollback.sql
 -- NOT run by bots.
 -- WARNING: Dropping public.pregnancy_profiles permanently deletes all saved due dates.
 begin;

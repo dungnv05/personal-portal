@@ -383,6 +383,7 @@ describe('GET / PUT /api/pregnancy', () => {
             cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
             'x-csrf-token': VALID_CSRF,
             'content-type': 'application/json',
+            'content-length': String(Buffer.byteLength(JSON.stringify(body), 'utf8')),
           },
           body,
         }),
@@ -480,9 +481,14 @@ describe('GET / PUT /api/pregnancy', () => {
     })
   })
 
-  it('11. PUT sends upsert URL, Prefer header, Bearer user token, user_id from token, and accepts null', async () => {
+  it('11. PUT sends upsert URL, Prefer header, Bearer user token, user_id from token, and deletes on null', async () => {
     const token = makeAccessCookie()
-    const calls: Array<{ url: string; method: string; headers: Record<string, string>; body: Record<string, unknown> }> = []
+    const calls: Array<{
+      url: string
+      method: string
+      headers: Record<string, string>
+      body: Record<string, unknown> | undefined
+    }> = []
 
     vi.stubGlobal(
       'fetch',
@@ -491,15 +497,18 @@ describe('GET / PUT /api/pregnancy', () => {
           return new Response(JSON.stringify({ id: USER_A }), { status: 200 })
         }
         if (url.includes('/rest/v1/pregnancy_profiles')) {
-          const parsedBody = JSON.parse(String(init?.body))
+          const parsedBody = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined
           calls.push({
             url,
             method: String(init?.method),
             headers: (init?.headers ?? {}) as Record<string, string>,
             body: parsedBody,
           })
+          if (init?.method === 'DELETE') {
+            return new Response(null, { status: 204 })
+          }
           return new Response(
-            JSON.stringify([{ due_date: parsedBody.due_date, updated_at: '2026-11-25T11:00:00Z' }]),
+            JSON.stringify([{ due_date: parsedBody?.due_date, updated_at: '2026-11-25T11:00:00Z' }]),
             { status: 200 },
           )
         }
@@ -516,6 +525,7 @@ describe('GET / PUT /api/pregnancy', () => {
           cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
           'x-csrf-token': VALID_CSRF,
           'content-type': 'application/json',
+          'content-length': '26',
         },
         body: { dueDate: '2026-08-15' },
       }),
@@ -537,6 +547,7 @@ describe('GET / PUT /api/pregnancy', () => {
           cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
           'x-csrf-token': VALID_CSRF,
           'content-type': 'application/json',
+          'content-length': '16',
         },
         body: { dueDate: null },
       }),
@@ -546,7 +557,7 @@ describe('GET / PUT /api/pregnancy', () => {
     expect(clearRes.body).toEqual({
       ok: true,
       dueDate: null,
-      updatedAt: '2026-11-25T11:00:00Z',
+      updatedAt: null,
     })
 
     expect(calls).toHaveLength(2)
@@ -556,7 +567,13 @@ describe('GET / PUT /api/pregnancy', () => {
     expect(calls[0].headers.Authorization).toBe(`Bearer ${token}`)
     expect(calls[0].headers.apikey).toBe(TEST_SUPABASE_ANON_KEY)
     expect(calls[0].body).toEqual({ user_id: USER_A, due_date: '2026-08-15' })
-    expect(calls[1].body).toEqual({ user_id: USER_A, due_date: null })
+
+    expect(calls[1].url).toBe(`${TEST_SUPABASE_URL}/rest/v1/pregnancy_profiles?user_id=eq.${USER_A}`)
+    expect(calls[1].method).toBe('DELETE')
+    expect(calls[1].headers.Prefer).toBe('return=minimal')
+    expect(calls[1].headers.Authorization).toBe(`Bearer ${token}`)
+    expect(calls[1].headers.apikey).toBe(TEST_SUPABASE_ANON_KEY)
+    expect(calls[1].body).toBeUndefined()
   })
 
   it('12. PostgREST 500 -> 502 storage_error', async () => {
@@ -596,6 +613,7 @@ describe('GET / PUT /api/pregnancy', () => {
           cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
           'x-csrf-token': VALID_CSRF,
           'content-type': 'application/json',
+          'content-length': '26',
         },
         body: { dueDate: '2026-08-15' },
       }),
@@ -649,5 +667,155 @@ describe('GET / PUT /api/pregnancy', () => {
     expect(res.statusCode).toBe(200)
     expect(res.body).toEqual({ ok: true, dueDate: null, updatedAt: null })
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith(kvUrl))).toBe(true)
+  })
+
+  it('15. PUT without or with empty Content-Length -> 411 length_required; non-numeric or negative -> 400 invalid_content_length', async () => {
+    const token = makeAccessCookie()
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/auth/v1/user')) {
+        return new Response(JSON.stringify({ id: USER_A }), { status: 200 })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const missingLen = createMockRes()
+    await pregnancyHandler(
+      createMockReq({
+        method: 'PUT',
+        headers: {
+          origin: ORIGIN,
+          cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
+          'x-csrf-token': VALID_CSRF,
+          'content-type': 'application/json',
+        },
+        body: { dueDate: '2026-08-15' },
+      }),
+      missingLen,
+    )
+    expect(missingLen.statusCode).toBe(411)
+    expect(missingLen.body).toEqual({ ok: false, error: 'length_required' })
+
+    const emptyLen = createMockRes()
+    await pregnancyHandler(
+      createMockReq({
+        method: 'PUT',
+        headers: {
+          origin: ORIGIN,
+          cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
+          'x-csrf-token': VALID_CSRF,
+          'content-type': 'application/json',
+          'content-length': '   ',
+        },
+        body: { dueDate: '2026-08-15' },
+      }),
+      emptyLen,
+    )
+    expect(emptyLen.statusCode).toBe(411)
+    expect(emptyLen.body).toEqual({ ok: false, error: 'length_required' })
+
+    for (const badLen of ['abc', '-1', '12.5']) {
+      const badRes = createMockRes()
+      await pregnancyHandler(
+        createMockReq({
+          method: 'PUT',
+          headers: {
+            origin: ORIGIN,
+            cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
+            'x-csrf-token': VALID_CSRF,
+            'content-type': 'application/json',
+            'content-length': badLen,
+          },
+          body: { dueDate: '2026-08-15' },
+        }),
+        badRes,
+      )
+      expect(badRes.statusCode).toBe(400)
+      expect(badRes.body).toEqual({ ok: false, error: 'invalid_content_length' })
+    }
+  })
+
+  it('16. PUT dueDate null sends single DELETE to PostgREST with user_id filter and no body, returns 200 null', async () => {
+    const token = makeAccessCookie()
+    const restCalls: Array<{ url: string; init: RequestInit | undefined }> = []
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes('/auth/v1/user')) {
+          return new Response(JSON.stringify({ id: USER_A }), { status: 200 })
+        }
+        if (url.includes('/rest/v1/pregnancy_profiles')) {
+          restCalls.push({ url, init })
+          return new Response(null, { status: 204 })
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }),
+    )
+
+    const res = createMockRes()
+    await pregnancyHandler(
+      createMockReq({
+        method: 'PUT',
+        headers: {
+          origin: ORIGIN,
+          cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
+          'x-csrf-token': VALID_CSRF,
+          'content-type': 'application/json',
+          'content-length': '16',
+        },
+        body: { dueDate: null },
+      }),
+      res,
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toEqual({ ok: true, dueDate: null, updatedAt: null })
+    expect(restCalls).toHaveLength(1)
+    expect(restCalls[0].init?.method).toBe('DELETE')
+    expect(restCalls[0].url).toContain(`user_id=eq.${USER_A}`)
+    expect(restCalls[0].init?.body).toBeUndefined()
+    const headers = (restCalls[0].init?.headers ?? {}) as Record<string, string>
+    expect(headers.Prefer).toBe('return=minimal')
+    expect(headers.Authorization).toBe(`Bearer ${token}`)
+    expect(headers.apikey).toBe(TEST_SUPABASE_ANON_KEY)
+  })
+
+  it('17. PUT dueDate null when PostgREST DELETE returns 500 -> 502 storage_error', async () => {
+    const token = makeAccessCookie()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/auth/v1/user')) {
+          return new Response(JSON.stringify({ id: USER_A }), { status: 200 })
+        }
+        if (url.includes('/rest/v1/pregnancy_profiles')) {
+          return new Response(JSON.stringify({ error: 'db_down' }), { status: 500 })
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }),
+    )
+
+    const res = createMockRes()
+    await pregnancyHandler(
+      createMockReq({
+        method: 'PUT',
+        headers: {
+          origin: ORIGIN,
+          cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
+          'x-csrf-token': VALID_CSRF,
+          'content-type': 'application/json',
+          'content-length': '16',
+        },
+        body: { dueDate: null },
+      }),
+      res,
+    )
+
+    expect(res.statusCode).toBe(502)
+    expect(res.body).toEqual({ ok: false, error: 'storage_error' })
+    expect(warnSpy).toHaveBeenCalledTimes(1)
   })
 })
