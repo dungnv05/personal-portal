@@ -32,7 +32,21 @@ type AuthMessage = {
   text: string
 }
 
-type AppStatus = 'Active' | 'In Dev' | 'Planned'
+type AppStatus = 'Active' | 'Beta' | 'In Dev' | 'Planned'
+
+const STATUS_ORDER: Record<AppStatus, number> = {
+  Active: 0,
+  Beta: 1,
+  'In Dev': 2,
+  Planned: 3,
+}
+
+const STATUS_BADGE: Record<AppStatus, { className: string; label: string }> = {
+  Active: { className: 'status-active', label: 'Active' },
+  Beta: { className: 'status-beta', label: 'Beta' },
+  'In Dev': { className: 'status-dev', label: 'Đang phát triển' },
+  Planned: { className: 'status-dev', label: 'Planned' },
+}
 
 type AppCard = {
   name: string
@@ -264,7 +278,7 @@ function App() {
       desc: 'Web Game 3D Idle Gacha thẻ bài đề tài lịch sử Việt Nam. Chiêu mộ danh nhân lịch sử, dàn trận 6v6, kích hoạt Hợp Kích, Thần Khí và Linh Vật thần thoại.',
       icon: <Gamepad2 />,
       url: 'https://vang-vong-su-viet.yundev.space',
-      status: 'Active',
+      status: 'In Dev',
       color: '#f59e0b',
       tags: ['React', 'Three.js', 'R3F', 'Zustand', 'TypeScript'],
     },
@@ -291,11 +305,15 @@ function App() {
       desc: 'Lộ trình PM/BrSE thị trường Nhật bằng tiếng Việt: khóa học, glossary và career path.',
       icon: <Kanban />,
       url: 'https://brse.yundev.space',
-      status: 'Planned',
+      status: 'Beta',
       color: '#8b5cf6',
       tags: ['Learning', 'PM/BrSE', 'Career Path', 'Glossary'],
     },
   ]
+
+  const sortedApps = [...apps].sort(
+    (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status],
+  )
 
   const techStack: TechStackItem[] = [
     { name: 'React 19', icon: '⚛️' },
@@ -369,12 +387,13 @@ function App() {
             </div>
 
             <div className="apps-grid">
-              {apps.map((app, index) => {
-                const isActive = app.status === 'Active'
+              {sortedApps.map((app) => {
+                const isLaunchable = app.status === 'Active' || app.status === 'Beta'
+                const badge = STATUS_BADGE[app.status]
                 return (
                   <div
-                    key={index}
-                    className={`cyber-card app-card${isActive ? '' : ' app-card-disabled'}`}
+                    key={app.name}
+                    className={`cyber-card app-card${isLaunchable ? '' : ' app-card-disabled'}`}
                   >
                     <div>
                       <div className="app-card-top">
@@ -384,8 +403,8 @@ function App() {
                         </div>
 
                         {/* Status Tag */}
-                        <span className={`app-status ${isActive ? 'status-active' : 'status-dev'}`}>
-                          {app.status}
+                        <span className={`app-status ${badge.className}`}>
+                          {badge.label}
                         </span>
                       </div>
 
@@ -403,15 +422,24 @@ function App() {
                           <span key={tIdx} className="tag-badge">{tag}</span>
                         ))}
                       </div>
-                      <a
-                        href={app.url}
-                        target={isActive ? '_blank' : '_self'}
-                        rel="noopener noreferrer"
-                        className="btn btn-secondary btn-launch"
-                      >
-                        <span>{isActive ? `Truy cập ${app.url.replace('https://', '')}` : 'Đang phát triển'}</span>
-                        {isActive && <ExternalLink size={15} />}
-                      </a>
+                      {isLaunchable ? (
+                        <a
+                          href={app.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-secondary btn-launch"
+                        >
+                          <span>{`Truy cập ${app.url.replace('https://', '')}`}</span>
+                          <ExternalLink size={15} />
+                        </a>
+                      ) : (
+                        <span
+                          className="btn btn-secondary btn-launch btn-launch-disabled"
+                          aria-disabled="true"
+                        >
+                          Đang phát triển
+                        </span>
+                      )}
                     </div>
                   </div>
                 )
