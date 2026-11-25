@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineYunHeader, YunHeader } from './index'
+import { defineYunHeader, isAllowedAuthOrigin, YunHeader } from './index'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -377,7 +377,7 @@ describe('<yun-header>', () => {
     expect(assignMock).not.toHaveBeenCalled()
   })
 
-  it('sets error state and does not dispatch yh-logout when logout returns 403', async () => {
+  it('keeps signed-in state, shows inline alert notice, and retries when logout returns 403', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -387,6 +387,8 @@ describe('<yun-header>', () => {
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ error: 'csrf_mismatch' }, 403))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }, 200))
+      .mockResolvedValueOnce(jsonResponse({ ok: false }, 401))
     vi.stubGlobal('fetch', fetchMock)
 
     const el = document.createElement('yun-header') as YunHeader
@@ -404,10 +406,24 @@ describe('<yun-header>', () => {
     logoutBtn.click()
     await flushMicrotasks()
 
-    expect(el.state).toBe('error')
+    expect(el.state).toBe('signed-in')
+    expect(el.user?.id).toBe('user-6')
     expect(logoutSpy).not.toHaveBeenCalled()
-    expect(el.shadowRoot!.querySelector('.yh-account-desktop')?.textContent).toContain('Không tải được tài khoản')
     expect(el.shadowRoot!.querySelector('.yh-sr-only')?.textContent).not.toContain('Đã đăng xuất')
+
+    const notice = el.shadowRoot!.querySelector<HTMLElement>('.yh-logout-notice')!
+    expect(notice.hidden).toBe(false)
+    expect(notice.getAttribute('role')).toBe('alert')
+    expect(notice.textContent).toContain('Đăng xuất không thành công, bạn vẫn đang đăng nhập.')
+
+    const retryBtn = notice.querySelector<HTMLButtonElement>('button')!
+    expect(retryBtn.textContent?.trim()).toBe('Thử lại')
+    retryBtn.click()
+    await flushMicrotasks()
+
+    expect(logoutSpy).toHaveBeenCalledTimes(1)
+    expect(el.state).toBe('signed-out')
+    expect(notice.hidden).toBe(true)
   })
 
   it('keeps signed-in state and marks stale on timeout while already signed in', async () => {
@@ -510,5 +526,155 @@ describe('<yun-header>', () => {
       expect(avatar.querySelector('img')).toBeNull()
       expect(avatar.textContent?.trim()).toBe('MN')
     }
+  })
+
+  it('rejects control chars, whitespace, and backslashes in profile-url and auth-base (SH-1)', async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({
+          ok: true,
+          user: { id: 'user-sh1', email: 'sh1@yundev.space' },
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const badProfileUrls = ['/\t/evil.com', '/\n/evil.com', '/\\evil.com', '\\\\evil.com', ' /x']
+    const badAuthBases = [
+      'https://www.yundev.space\t',
+      'https://www.yundev.space\n',
+      'https://www.yundev.space\\evil',
+      '\\\\evil.com',
+      ' https://www.yundev.space',
+    ]
+
+    for (let i = 0; i < badProfileUrls.length; i += 1) {
+      document.body.innerHTML = ''
+      fetchMock.mockClear()
+      const el = document.createElement('yun-header') as YunHeader
+      el.setAttribute('auth-base', badAuthBases[i]!)
+      el.setAttribute('profile-url', badProfileUrls[i]!)
+      document.body.appendChild(el)
+      await flushMicrotasks()
+
+      expect(fetchMock).toHaveBeenCalledWith('https://www.yundev.space/api/auth/me', expect.any(Object))
+      const profileLink = Array.from(el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]'))
+        .find((a) => a.textContent?.trim() === 'Hồ sơ')
+      expect(profileLink?.getAttribute('href')).toBe('https://www.yundev.space/?view=profile')
+    }
+  })
+
+  it('gates localhost/127.0.0.1 behind allowLocalhost and rejects numeric or IPv6 variants (SH-2)', () => {
+    expect(isAllowedAuthOrigin('http://localhost:5173', { allowLocalhost: false })).toBe(false)
+    expect(isAllowedAuthOrigin('http://127.0.0.1:5173', { allowLocalhost: false })).toBe(false)
+    expect(isAllowedAuthOrigin(new URL('http://localhost:5173'), { allowLocalhost: false })).toBe(false)
+
+    expect(isAllowedAuthOrigin('http://localhost:5173', { allowLocalhost: true })).toBe(true)
+    expect(isAllowedAuthOrigin('http://127.0.0.1:5173', { allowLocalhost: true })).toBe(true)
+    expect(isAllowedAuthOrigin('https://www.yundev.space', { allowLocalhost: false })).toBe(true)
+
+    expect(isAllowedAuthOrigin('http://0x7f.0.0.1', { allowLocalhost: true })).toBe(false)
+    expect(isAllowedAuthOrigin('http://2130706433', { allowLocalhost: true })).toBe(false)
+    expect(isAllowedAuthOrigin('http://127.1', { allowLocalhost: true })).toBe(false)
+    expect(isAllowedAuthOrigin('http://[::1]', { allowLocalhost: true })).toBe(false)
+  })
+
+  it('rejects https URLs with explicit non-443 ports for auth-base and profile-url (NIT)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ok: true,
+        user: { id: 'user-nit', email: 'nit@yundev.space' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('auth-base', 'https://www.yundev.space:8443')
+    el.setAttribute('profile-url', 'https://www.yundev.space:8443/profile')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    expect(fetchMock).toHaveBeenCalledWith('https://www.yundev.space/api/auth/me', expect.any(Object))
+    const profileLink = Array.from(el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]'))
+      .find((a) => a.textContent?.trim() === 'Hồ sơ')
+    expect(profileLink?.getAttribute('href')).toBe('https://www.yundev.space/?view=profile')
+    expect(isAllowedAuthOrigin('https://www.yundev.space:443', { allowLocalhost: false })).toBe(true)
+    expect(isAllowedAuthOrigin('https://www.yundev.space:8443', { allowLocalhost: false })).toBe(false)
+  })
+
+  it('strips hash fragment and auth query param from next URL on sign-in/sign-up (SH-4)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: false }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const assignMock = vi.fn()
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...originalLocation,
+        href: 'https://tinh-luong.yundev.space/calc?tab=gross&auth=signin#access_token=secret',
+        assign: assignMock,
+      },
+      configurable: true,
+      writable: true,
+    })
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('auth-base', 'https://www.yundev.space')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const signUpBtn = Array.from(el.shadowRoot!.querySelectorAll<HTMLButtonElement>('.yh-account-desktop button'))
+      .find((b) => b.textContent?.trim() === 'Đăng ký')!
+    signUpBtn.click()
+
+    expect(assignMock).toHaveBeenCalledWith(
+      `https://www.yundev.space/?auth=signup&next=${encodeURIComponent('https://tinh-luong.yundev.space/calc?tab=gross')}`,
+    )
+  })
+
+  it('sets no-referrer and async decoding on avatar img and falls back to initials on error (SH-5)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ok: true,
+        user: {
+          id: 'user-avatar-err',
+          display_name: 'Minh Nguyen',
+          avatar_url: 'https://cdn.yundev.space/broken.png',
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const avatar = el.shadowRoot!.querySelector('[part="account-button"] .yh-avatar')!
+    const img = avatar.querySelector('img')!
+    expect(img).not.toBeNull()
+    expect(img.referrerPolicy).toBe('no-referrer')
+    expect(img.decoding).toBe('async')
+
+    img.dispatchEvent(new Event('error'))
+    expect(avatar.querySelector('img')).toBeNull()
+    expect(avatar.textContent?.trim()).toBe('MN')
+  })
+
+  it('validates skip-target against /^#[A-Za-z][\\w-]*$/ and falls back to #main (SH-6)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: false }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('skip-target', 'javascript:alert(1)')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const skipLink = el.shadowRoot!.querySelector<HTMLAnchorElement>('.yh-skip-link')!
+    expect(skipLink.getAttribute('href')).toBe('#main')
+
+    el.setAttribute('skip-target', '#123bad')
+    expect(skipLink.getAttribute('href')).toBe('#main')
+
+    el.setAttribute('skip-target', '#main-content_1')
+    expect(skipLink.getAttribute('href')).toBe('#main-content_1')
   })
 })

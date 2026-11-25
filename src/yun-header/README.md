@@ -7,11 +7,11 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 | Attribute | Type | Default | Description |
 | --- | --- | --- | --- |
 | `app` | `"portal" \| "tinh-luong" \| "brse" \| "vang-vong" \| "ivf"` | — | Identifies the host application. |
-| `auth-base` | `string` | `"https://www.yundev.space"` | Base URL for `/api/auth/me`, `/api/auth/logout`, and sign-in/sign-up redirects. Allowlisted to `https://yundev.space`, `https://*.yundev.space`, or `http://localhost` / `http://127.0.0.1` (any port); invalid values fall back to the default. |
+| `auth-base` | `string` | `"https://www.yundev.space"` | Base URL for `/api/auth/me`, `/api/auth/logout`, and sign-in/sign-up redirects. Allowlisted to `https://yundev.space`, `https://*.yundev.space` (no explicit non-443 port), or `http://localhost` / `http://127.0.0.1` in dev builds only; values with control chars, whitespace, or `\` fall back to the default. |
 | `variant` | `"bar" \| "overlay"` | `"bar"` | `"bar"` renders a 64px sticky bar (56px on `<=640px`); `"overlay"` renders a 48px translucent bar. |
-| `profile-url` | `string` | `${authBase}/?view=profile` | Destination for the "Hồ sơ" menu item. Accepts allowlisted origins (same as `auth-base`) or a same-origin relative path starting with `/` (not `//`); invalid values fall back to `${authBase}/?view=profile`. |
-| `hide-account` | `boolean` | `false` | Hides the account block and expired-session notice. |
-| `skip-target` | `string` | `"#main"` | `href` for the skip link ("Bỏ qua đến nội dung"). |
+| `profile-url` | `string` | `${authBase}/?view=profile` | Destination for the "Hồ sơ" menu item. Accepts allowlisted origins (same as `auth-base`) or a same-origin relative path starting with `/` (not `//`); values with control chars, whitespace, or `\` or disallowed origins fall back to `${authBase}/?view=profile`. |
+| `hide-account` | `boolean` | `false` | Hides the account block, expired-session notice, and logout-error notice. |
+| `skip-target` | `string` | `"#main"` | `href` for the skip link ("Bỏ qua đến nội dung"). Must match `/^#[A-Za-z][\w-]*$/`; otherwise falls back to `"#main"`. |
 
 ## Slots
 
@@ -24,7 +24,7 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 ## Properties & Methods
 
 - `el.state` (read-only): `'loading' | 'signed-out' | 'signed-in' | 'expired' | 'error'`
-- `el.user` (read-only): `{ id, email, displayName, avatarUrl, initials } | null` (`avatarUrl` only accepts `https:` URLs; other schemes or relative paths fall back to initials)
+- `el.user` (read-only): `{ id, email, displayName, avatarUrl, initials } | null` (`avatarUrl` only accepts `https:` URLs; other schemes or relative paths fall back to initials. The `<img>` sets `referrerPolicy="no-referrer"`, `decoding="async"`, and falls back to initials on `error`. Note: portal CSP `img-src` currently allows only `'self' data:`, so external avatar hosts will be blocked until PR2 decides the CSP `img-src` list.)
 - `el.stale` (read-only): `boolean` — `true` when a background `refresh()` times out after 3s while already `signed-in` (the header keeps the existing user in `signed-in` state instead of dropping to `signed-out`; the 3s → `signed-out` fallback applies only when no user was signed in).
 - `el.refresh()`: Re-fetches `${authBase}/api/auth/me` with `credentials: 'include'`.
 

@@ -1,4 +1,5 @@
 import {
+  isAllowedAuthOrigin,
   YunHeader,
   type YunHeaderApp,
   type YunHeaderAuthChangeDetail,
@@ -9,6 +10,7 @@ import {
 } from './yun-header'
 
 export {
+  isAllowedAuthOrigin,
   YunHeader,
   type YunHeaderApp,
   type YunHeaderAuthChangeDetail,

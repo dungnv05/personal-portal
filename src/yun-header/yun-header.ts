@@ -21,6 +21,8 @@ export interface YunHeaderMenuToggleDetail {
 
 const DEFAULT_AUTH_BASE = 'https://www.yundev.space'
 const LOADING_TIMEOUT_MS = 3000
+const ALLOW_LOCALHOST: boolean = import.meta.env.DEV === true
+const SKIP_TARGET_PATTERN = /^#[A-Za-z][\w-]*$/
 
 const STYLES = `
 :host {
@@ -332,7 +334,8 @@ const STYLES = `
   color: var(--yh-muted, #B8B3C7);
 }
 
-.yh-expired-notice {
+.yh-expired-notice,
+.yh-logout-notice {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -450,7 +453,8 @@ const STYLES = `
     display: inline-flex;
   }
 
-  .yh-expired-notice {
+  .yh-expired-notice,
+  .yh-logout-notice {
     padding: 8px 16px;
   }
 }
@@ -487,28 +491,86 @@ function sanitizeAvatarUrl(raw: string | null): string | null {
   }
 }
 
-function isAllowedAuthOrigin(url: URL): boolean {
+function hasUnsafeUrlChars(value: string): boolean {
+  if (/\s/.test(value)) {
+    return true
+  }
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i)
+    if (code <= 0x20 || code === 0x7f || code === 0x5c) {
+      return true
+    }
+  }
+  return false
+}
+
+function extractRawAuthorityHost(raw: string): string | null {
+  const schemeIdx = raw.indexOf('://')
+  if (schemeIdx < 0) {
+    return null
+  }
+  const afterScheme = raw.slice(schemeIdx + 3)
+  const endIdx = afterScheme.search(/[/?#]/)
+  const authority = endIdx >= 0 ? afterScheme.slice(0, endIdx) : afterScheme
+  if (!authority || authority.includes('@') || authority.startsWith('[')) {
+    return null
+  }
+  const colonIdx = authority.indexOf(':')
+  const host = colonIdx >= 0 ? authority.slice(0, colonIdx) : authority
+  return host.toLowerCase()
+}
+
+export function isAllowedAuthOrigin(
+  input: URL | string,
+  opts: { allowLocalhost: boolean } = { allowLocalhost: ALLOW_LOCALHOST },
+): boolean {
+  let url: URL
+  if (typeof input === 'string') {
+    if (!input || hasUnsafeUrlChars(input)) {
+      return false
+    }
+    try {
+      url = new URL(input)
+    } catch {
+      return false
+    }
+  } else {
+    url = input
+  }
+
   if (url.username || url.password) {
     return false
   }
   const host = url.hostname.toLowerCase()
   if (url.protocol === 'https:') {
+    if (url.port !== '') {
+      return false
+    }
     return host === 'yundev.space' || host.endsWith('.yundev.space')
   }
   if (url.protocol === 'http:') {
-    return host === 'localhost' || host === '127.0.0.1'
+    if (!opts.allowLocalhost) {
+      return false
+    }
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      return false
+    }
+    if (typeof input === 'string') {
+      const rawHost = extractRawAuthorityHost(input)
+      return rawHost === 'localhost' || rawHost === '127.0.0.1'
+    }
+    return true
   }
   return false
 }
 
 function sanitizeAuthBase(raw: string | null): string {
-  const trimmed = raw?.trim()
-  if (!trimmed) {
+  if (!raw || hasUnsafeUrlChars(raw)) {
     return DEFAULT_AUTH_BASE
   }
   try {
-    const parsed = new URL(trimmed)
-    return isAllowedAuthOrigin(parsed) ? parsed.origin : DEFAULT_AUTH_BASE
+    const parsed = new URL(raw)
+    return isAllowedAuthOrigin(raw, { allowLocalhost: ALLOW_LOCALHOST }) ? parsed.origin : DEFAULT_AUTH_BASE
   } catch {
     return DEFAULT_AUTH_BASE
   }
@@ -516,18 +578,28 @@ function sanitizeAuthBase(raw: string | null): string {
 
 function sanitizeProfileUrl(raw: string | null, authBase: string): string {
   const fallback = `${authBase}/?view=profile`
-  const trimmed = raw?.trim()
-  if (!trimmed) {
+  if (!raw || hasUnsafeUrlChars(raw)) {
     return fallback
   }
-  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\')) {
-    return trimmed
+  if (raw.startsWith('/') && !raw.startsWith('//')) {
+    return raw
   }
   try {
-    const parsed = new URL(trimmed)
-    return isAllowedAuthOrigin(parsed) ? parsed.href : fallback
+    const parsed = new URL(raw)
+    return isAllowedAuthOrigin(raw, { allowLocalhost: ALLOW_LOCALHOST }) ? parsed.href : fallback
   } catch {
     return fallback
+  }
+}
+
+function buildNextUrl(currentHref: string): string {
+  try {
+    const url = new URL(currentHref)
+    url.hash = ''
+    url.searchParams.delete('auth')
+    return url.toString()
+  } catch {
+    return currentHref
   }
 }
 
@@ -632,6 +704,12 @@ function createAvatarNode(user: YunHeaderUser): HTMLElement {
     const img = document.createElement('img')
     img.src = user.avatarUrl
     img.alt = ''
+    img.referrerPolicy = 'no-referrer'
+    img.decoding = 'async'
+    img.addEventListener('error', () => {
+      img.remove()
+      wrapper.textContent = user.initials
+    })
     wrapper.appendChild(img)
   } else {
     wrapper.textContent = user.initials
@@ -651,6 +729,7 @@ export class YunHeader extends HTMLElement {
   private _menuOpen = false
   private _sheetOpen = false
   private _loggingOut = false
+  private _logoutError = false
   private _abortController: AbortController | null = null
   private _loadingTimer: ReturnType<typeof setTimeout> | null = null
   private _lastAnnouncedAuthKey: string | null = null
@@ -660,6 +739,7 @@ export class YunHeader extends HTMLElement {
   private _skipLink!: HTMLAnchorElement
   private _accountDesktop!: HTMLDivElement
   private _expiredNotice!: HTMLDivElement
+  private _logoutNotice!: HTMLDivElement
   private _mobileToggleBtn!: HTMLButtonElement
   private _sheetBackdrop!: HTMLDivElement
   private _sheetDialog!: HTMLDivElement
@@ -734,7 +814,7 @@ export class YunHeader extends HTMLElement {
 
   private get skipTarget(): string {
     const raw = this.getAttribute('skip-target')?.trim()
-    return raw && raw.length > 0 ? raw : '#main'
+    return raw && SKIP_TARGET_PATTERN.test(raw) ? raw : '#main'
   }
 
   connectedCallback(): void {
@@ -822,6 +902,7 @@ export class YunHeader extends HTMLElement {
         this._applySignedOutOrExpired(wasSignedIn)
       } else {
         this._stale = false
+        this._logoutError = false
         this._state = 'error'
         this._lastStableState = 'error'
         this._user = null
@@ -834,6 +915,7 @@ export class YunHeader extends HTMLElement {
           this._lastStableState = 'signed-in'
         } else {
           this._stale = false
+          this._logoutError = false
           this._state = 'signed-out'
           this._lastStableState = 'signed-out'
           this._user = null
@@ -842,6 +924,7 @@ export class YunHeader extends HTMLElement {
         return
       } else {
         this._stale = false
+        this._logoutError = false
         this._state = 'error'
         this._lastStableState = 'error'
         this._user = null
@@ -862,6 +945,7 @@ export class YunHeader extends HTMLElement {
 
   private _applySignedOutOrExpired(wasSignedIn: boolean): void {
     this._stale = false
+    this._logoutError = false
     this._user = null
     this._menuOpen = false
     if (wasSignedIn) {
@@ -955,6 +1039,22 @@ export class YunHeader extends HTMLElement {
     })
     this._expiredNotice.append(expiredText, reloginBtn)
 
+    this._logoutNotice = document.createElement('div')
+    this._logoutNotice.className = 'yh-logout-notice'
+    this._logoutNotice.setAttribute('role', 'alert')
+    this._logoutNotice.hidden = true
+
+    const logoutErrorText = document.createElement('span')
+    logoutErrorText.textContent = 'Đăng xuất không thành công, bạn vẫn đang đăng nhập.'
+    const logoutRetryBtn = document.createElement('button')
+    logoutRetryBtn.type = 'button'
+    logoutRetryBtn.className = 'yh-btn yh-btn-primary'
+    logoutRetryBtn.textContent = 'Thử lại'
+    logoutRetryBtn.addEventListener('click', () => {
+      void this._handleLogout()
+    })
+    this._logoutNotice.append(logoutErrorText, logoutRetryBtn)
+
     this._sheetBackdrop = document.createElement('div')
     this._sheetBackdrop.className = 'yh-sheet-backdrop'
     this._sheetBackdrop.hidden = true
@@ -1006,6 +1106,7 @@ export class YunHeader extends HTMLElement {
       styleEl,
       header,
       this._expiredNotice,
+      this._logoutNotice,
       this._sheetBackdrop,
       this._liveRegion,
     )
@@ -1045,7 +1146,7 @@ export class YunHeader extends HTMLElement {
       this._setSheetOpen(false, false)
     }
     if (notPrevented) {
-      const next = encodeURIComponent(window.location.href)
+      const next = encodeURIComponent(buildNextUrl(window.location.href))
       window.location.assign(`${this.authBase}/?auth=${mode}&next=${next}`)
     }
   }
@@ -1055,6 +1156,7 @@ export class YunHeader extends HTMLElement {
       return
     }
     this._loggingOut = true
+    this._logoutError = false
     this._renderAccountRegions()
 
     let ok = false
@@ -1079,15 +1181,12 @@ export class YunHeader extends HTMLElement {
     }
 
     if (!ok) {
-      this._stale = false
-      this._state = 'error'
-      this._lastStableState = 'error'
-      this._user = null
+      this._logoutError = true
       this._renderAccountRegions()
-      this._dispatchAuthChange()
       return
     }
 
+    this._logoutError = false
     this._stale = false
     this._lastStableState = 'signed-out'
     this._announce('Đã đăng xuất')
@@ -1241,6 +1340,7 @@ export class YunHeader extends HTMLElement {
     }
 
     this._expiredNotice.hidden = this.hideAccount || this._state !== 'expired'
+    this._logoutNotice.hidden = this.hideAccount || !this._logoutError || this._state !== 'signed-in'
 
     if (this.hideAccount) {
       this._accountDesktop.hidden = true

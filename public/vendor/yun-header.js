@@ -1,14 +1,14 @@
 //#region src/yun-header/yun-header.ts
-var e = "https://www.yundev.space";
-function t(e) {
+var e = "https://www.yundev.space", t = /^#[A-Za-z][\w-]*$/;
+function n(e) {
 	return typeof e == "object" && !!e;
 }
-function n(e) {
+function r(e) {
 	if (typeof e != "string") return null;
 	let t = e.trim();
 	return t.length > 0 ? t : null;
 }
-function r(e) {
+function i(e) {
 	if (!e) return null;
 	try {
 		let t = new URL(e);
@@ -17,52 +17,93 @@ function r(e) {
 		return null;
 	}
 }
-function i(e) {
-	if (e.username || e.password) return !1;
-	let t = e.hostname.toLowerCase();
-	return e.protocol === "https:" ? t === "yundev.space" || t.endsWith(".yundev.space") : e.protocol === "http:" ? t === "localhost" || t === "127.0.0.1" : !1;
+function a(e) {
+	if (/\s/.test(e)) return !0;
+	for (let t = 0; t < e.length; t += 1) {
+		let n = e.charCodeAt(t);
+		if (n <= 32 || n === 127 || n === 92) return !0;
+	}
+	return !1;
 }
-function a(t) {
-	let n = t?.trim();
-	if (!n) return e;
+function o(e) {
+	let t = e.indexOf("://");
+	if (t < 0) return null;
+	let n = e.slice(t + 3), r = n.search(/[/?#]/), i = r >= 0 ? n.slice(0, r) : n;
+	if (!i || i.includes("@") || i.startsWith("[")) return null;
+	let a = i.indexOf(":");
+	return (a >= 0 ? i.slice(0, a) : i).toLowerCase();
+}
+function s(e, t = { allowLocalhost: !1 }) {
+	let n;
+	if (typeof e == "string") {
+		if (!e || a(e)) return !1;
+		try {
+			n = new URL(e);
+		} catch {
+			return !1;
+		}
+	} else n = e;
+	if (n.username || n.password) return !1;
+	let r = n.hostname.toLowerCase();
+	if (n.protocol === "https:") return n.port === "" ? r === "yundev.space" || r.endsWith(".yundev.space") : !1;
+	if (n.protocol === "http:") {
+		if (!t.allowLocalhost || r !== "localhost" && r !== "127.0.0.1") return !1;
+		if (typeof e == "string") {
+			let t = o(e);
+			return t === "localhost" || t === "127.0.0.1";
+		}
+		return !0;
+	}
+	return !1;
+}
+function c(t) {
+	if (!t || a(t)) return e;
 	try {
-		let t = new URL(n);
-		return i(t) ? t.origin : e;
+		let n = new URL(t);
+		return s(t, { allowLocalhost: !1 }) ? n.origin : e;
 	} catch {
 		return e;
 	}
 }
-function o(e, t) {
-	let n = `${t}/?view=profile`, r = e?.trim();
-	if (!r) return n;
-	if (r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\")) return r;
+function l(e, t) {
+	let n = `${t}/?view=profile`;
+	if (!e || a(e)) return n;
+	if (e.startsWith("/") && !e.startsWith("//")) return e;
 	try {
-		let e = new URL(r);
-		return i(e) ? e.href : n;
+		let t = new URL(e);
+		return s(e, { allowLocalhost: !1 }) ? t.href : n;
 	} catch {
 		return n;
 	}
 }
-function s(e) {
+function u(e) {
+	try {
+		let t = new URL(e);
+		return t.hash = "", t.searchParams.delete("auth"), t.toString();
+	} catch {
+		return e;
+	}
+}
+function d(e) {
 	let t = e.trim().split(/\s+/).filter(Boolean).slice(0, 2);
 	return t.length === 0 ? "U" : t.map((e) => Array.from(e)[0] ?? "").join("").toUpperCase();
 }
-function c(e) {
-	if (!t(e) || e.ok === !1) return null;
-	let i = e.user;
-	if (!t(i)) return null;
-	let a = n(i.id);
+function f(e) {
+	if (!n(e) || e.ok === !1) return null;
+	let t = e.user;
+	if (!n(t)) return null;
+	let a = r(t.id);
 	if (!a) return null;
-	let o = n(i.email), c = t(i.user_metadata) ? i.user_metadata : null, l = n(i.display_name) ?? (c ? n(c.full_name) : null), u = o && o.split("@")[0]?.trim() || null, d = l ?? u ?? "User";
+	let o = r(t.email), s = n(t.user_metadata) ? t.user_metadata : null, c = r(t.display_name) ?? (s ? r(s.full_name) : null), l = o && o.split("@")[0]?.trim() || null, u = c ?? l ?? "User";
 	return {
 		id: a,
 		email: o,
-		displayName: d,
-		avatarUrl: r(n(i.avatar_url) ?? (c ? n(c.avatar_url) : null)),
-		initials: s(d)
+		displayName: u,
+		avatarUrl: i(r(t.avatar_url) ?? (s ? r(s.avatar_url) : null)),
+		initials: d(u)
 	};
 }
-function l() {
+function p() {
 	if (typeof document > "u" || !document.cookie) return "";
 	let e = "";
 	for (let t of document.cookie.split(";")) {
@@ -77,21 +118,23 @@ function l() {
 	}
 	return e;
 }
-function u(e, t) {
+function m(e, t) {
 	let n = "http://www.w3.org/2000/svg", r = document.createElementNS(n, "svg");
 	r.setAttribute("viewBox", "0 0 24 24"), r.setAttribute("width", "18"), r.setAttribute("height", "18"), r.setAttribute("fill", "none"), r.setAttribute("stroke", "currentColor"), r.setAttribute("stroke-width", "2"), r.setAttribute("stroke-linecap", "round"), r.setAttribute("stroke-linejoin", "round"), r.setAttribute("aria-hidden", "true"), t && r.setAttribute("class", t);
 	let i = document.createElementNS(n, "path");
 	return i.setAttribute("d", e), r.appendChild(i), r;
 }
-function d(e) {
+function h(e) {
 	let t = document.createElement("span");
 	if (t.className = "yh-avatar", t.setAttribute("aria-hidden", "true"), e.avatarUrl) {
 		let n = document.createElement("img");
-		n.src = e.avatarUrl, n.alt = "", t.appendChild(n);
+		n.src = e.avatarUrl, n.alt = "", n.referrerPolicy = "no-referrer", n.decoding = "async", n.addEventListener("error", () => {
+			n.remove(), t.textContent = e.initials;
+		}), t.appendChild(n);
 	} else t.textContent = e.initials;
 	return t;
 }
-var f = class extends HTMLElement {
+var g = class extends HTMLElement {
 	static get observedAttributes() {
 		return [
 			"app",
@@ -109,6 +152,7 @@ var f = class extends HTMLElement {
 	_menuOpen = !1;
 	_sheetOpen = !1;
 	_loggingOut = !1;
+	_logoutError = !1;
 	_abortController = null;
 	_loadingTimer = null;
 	_lastAnnouncedAuthKey = null;
@@ -117,6 +161,7 @@ var f = class extends HTMLElement {
 	_skipLink;
 	_accountDesktop;
 	_expiredNotice;
+	_logoutNotice;
 	_mobileToggleBtn;
 	_sheetBackdrop;
 	_sheetDialog;
@@ -156,17 +201,17 @@ var f = class extends HTMLElement {
 		return this._stale;
 	}
 	get authBase() {
-		return a(this.getAttribute("auth-base"));
+		return c(this.getAttribute("auth-base"));
 	}
 	get profileUrl() {
-		return o(this.getAttribute("profile-url"), this.authBase);
+		return l(this.getAttribute("profile-url"), this.authBase);
 	}
 	get hideAccount() {
 		return this.hasAttribute("hide-account");
 	}
 	get skipTarget() {
 		let e = this.getAttribute("skip-target")?.trim();
-		return e && e.length > 0 ? e : "#main";
+		return e && t.test(e) ? e : "#main";
 	}
 	connectedCallback() {
 		this._ensureDom(), this._syncAttributes(), window.addEventListener("focus", this._onWindowFocus), document.addEventListener("visibilitychange", this._onVisibilityChange), document.addEventListener("click", this._onDocumentClick), document.addEventListener("keydown", this._onDocumentKeyDown), this.refresh();
@@ -201,23 +246,23 @@ var f = class extends HTMLElement {
 				} catch {
 					e = null;
 				}
-				let r = c(e);
+				let r = f(e);
 				if (r) {
 					let e = this._lastStableState !== "signed-in" || this._user?.id !== r.id;
 					this._stale = !1, this._state = "signed-in", this._lastStableState = "signed-in", this._user = r, e && this._announce(`Đã đăng nhập với tên ${r.displayName}`);
 				} else this._applySignedOutOrExpired(t);
-			} else n.status === 401 ? this._applySignedOutOrExpired(t) : (this._stale = !1, this._state = "error", this._lastStableState = "error", this._user = null);
+			} else n.status === 401 ? this._applySignedOutOrExpired(t) : (this._stale = !1, this._logoutError = !1, this._state = "error", this._lastStableState = "error", this._user = null);
 		} catch {
-			if (n) t && this._user ? (this._stale = !0, this._state = "signed-in", this._lastStableState = "signed-in") : (this._stale = !1, this._state = "signed-out", this._lastStableState = "signed-out", this._user = null);
+			if (n) t && this._user ? (this._stale = !0, this._state = "signed-in", this._lastStableState = "signed-in") : (this._stale = !1, this._logoutError = !1, this._state = "signed-out", this._lastStableState = "signed-out", this._user = null);
 			else if (e.signal.aborted) return;
-			else this._stale = !1, this._state = "error", this._lastStableState = "error", this._user = null;
+			else this._stale = !1, this._logoutError = !1, this._state = "error", this._lastStableState = "error", this._user = null;
 		} finally {
 			clearTimeout(r), this._loadingTimer === r && (this._loadingTimer = null), this._abortController === e && (this._abortController = null);
 		}
 		this._renderAccountRegions(), this._dispatchAuthChange();
 	}
 	_applySignedOutOrExpired(e) {
-		this._stale = !1, this._user = null, this._menuOpen = !1, e ? (this._state = "expired", this._lastStableState = "expired") : (this._state = "signed-out", this._lastStableState = "signed-out");
+		this._stale = !1, this._logoutError = !1, this._user = null, this._menuOpen = !1, e ? (this._state = "expired", this._lastStableState = "expired") : (this._state = "signed-out", this._lastStableState = "signed-out");
 	}
 	_abortPending() {
 		this._loadingTimer !== null && (clearTimeout(this._loadingTimer), this._loadingTimer = null), this._abortController &&= (this._abortController.abort("superseded"), null);
@@ -226,7 +271,7 @@ var f = class extends HTMLElement {
 		if (this._rendered) return;
 		this._rendered = !0;
 		let e = document.createElement("style");
-		e.textContent = "\n:host {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 40;\n  font-family: var(--yh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);\n  color: var(--yh-ink, #F2EFF7);\n}\n\n*, *::before, *::after {\n  box-sizing: border-box;\n}\n\n.yh-bar {\n  position: relative;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n  min-height: 64px;\n  padding: 0 24px;\n  background: var(--yh-bg, #15121D);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  backdrop-filter: blur(12px);\n  -webkit-backdrop-filter: blur(12px);\n}\n\n:host([variant=\"overlay\"]) .yh-bar {\n  min-height: 48px;\n  background: color-mix(in srgb, var(--yh-bg, #15121D) 72%, transparent);\n  border-bottom-color: transparent;\n}\n\n.yh-skip-link {\n  position: absolute;\n  left: -9999px;\n  top: 8px;\n  z-index: 60;\n  padding: 10px 16px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.875rem;\n  font-weight: 600;\n  text-decoration: none;\n}\n\n.yh-skip-link:focus,\n.yh-skip-link:focus-visible {\n  left: 16px;\n}\n\n.yh-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-nav {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-right {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  flex-shrink: 0;\n}\n\n.yh-account-desktop {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  position: relative;\n}\n\n.yh-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 0 14px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid transparent;\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  line-height: 1;\n  cursor: pointer;\n  text-decoration: none;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;\n}\n\n.yh-btn:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-btn-text:hover:not(:disabled) {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-btn-primary {\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n}\n\n.yh-btn-primary:hover:not(:disabled) {\n  filter: brightness(1.06);\n}\n\n.yh-btn-icon {\n  padding: 0;\n  width: 44px;\n  height: 44px;\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-btn-icon:hover:not(:disabled) {\n  color: var(--yh-ink, #F2EFF7);\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-account-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 4px 10px 4px 6px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color 150ms ease, border-color 150ms ease;\n}\n\n.yh-account-btn:hover {\n  background: color-mix(in srgb, var(--yh-surface, #1D1927) 86%, var(--yh-ink, #F2EFF7));\n}\n\n.yh-avatar {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.8125rem;\n  font-weight: 700;\n}\n\n.yh-avatar img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n\n.yh-account-name {\n  max-width: 16ch;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-chevron {\n  width: 16px;\n  height: 16px;\n  flex-shrink: 0;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-menu {\n  position: absolute;\n  top: calc(100% + 8px);\n  right: 0;\n  min-width: 240px;\n  padding: 8px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-surface, #1D1927);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);\n  z-index: 50;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu[hidden] {\n  display: none;\n}\n\n.yh-menu-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 8px 10px 10px;\n}\n\n.yh-menu-identity {\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu-name {\n  font-size: 0.875rem;\n  font-weight: 600;\n  color: var(--yh-ink, #F2EFF7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-email {\n  font-size: 0.75rem;\n  color: var(--yh-muted, #B8B3C7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-divider {\n  height: 1px;\n  margin: 4px 0;\n  background: var(--yh-border, rgba(255, 255, 255, 0.1));\n  border: 0;\n}\n\n.yh-menu-item {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  min-height: 44px;\n  padding: 0 12px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n  border: 0;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 500;\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.yh-menu-item:hover:not(:disabled),\n.yh-menu-item:focus-visible {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-menu-item:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-skeleton {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 44px;\n  padding: 0 6px;\n}\n\n.yh-skeleton-circle {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-skeleton-bar {\n  width: 72px;\n  height: 14px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-error-inline {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.yh-muted-text {\n  font-size: 0.8125rem;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-expired-notice {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-wrap: wrap;\n  gap: 12px;\n  padding: 8px 24px;\n  background: var(--yh-surface, #1D1927);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  font-size: 0.875rem;\n  color: var(--yh-ink, #F2EFF7);\n}\n\n.yh-mobile-toggle {\n  display: none;\n}\n\n.yh-sheet-backdrop {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.52);\n  z-index: 60;\n  display: flex;\n  justify-content: flex-end;\n}\n\n.yh-sheet-backdrop[hidden] {\n  display: none;\n}\n\n.yh-sheet {\n  width: 85vw;\n  max-width: 360px;\n  height: 100%;\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  border-left: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  padding: 16px;\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n  overflow-y: auto;\n}\n\n.yh-sheet-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n.yh-sheet-title {\n  font-size: 1rem;\n  font-weight: 700;\n}\n\n.yh-sheet-nav {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.yh-sheet-nav:empty {\n  display: none;\n}\n\n.yh-sheet-account {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-top: 12px;\n  border-top: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n}\n\n.yh-sheet-account-actions {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.yh-sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n:focus-visible {\n  outline: 2px solid var(--yh-focus, #A78BFA);\n  outline-offset: 2px;\n}\n\n@media (min-width: 641px) and (max-width: 1023px) {\n  .yh-account-name {\n    display: none;\n  }\n}\n\n@media (max-width: 640px) {\n  .yh-bar {\n    min-height: 56px;\n    padding: 0 16px;\n  }\n\n  .yh-nav,\n  .yh-account-desktop {\n    display: none;\n  }\n\n  .yh-mobile-toggle {\n    display: inline-flex;\n  }\n\n  .yh-expired-notice {\n    padding: 8px 16px;\n  }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    transition: none !important;\n    animation: none !important;\n  }\n}\n";
+		e.textContent = "\n:host {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 40;\n  font-family: var(--yh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);\n  color: var(--yh-ink, #F2EFF7);\n}\n\n*, *::before, *::after {\n  box-sizing: border-box;\n}\n\n.yh-bar {\n  position: relative;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n  min-height: 64px;\n  padding: 0 24px;\n  background: var(--yh-bg, #15121D);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  backdrop-filter: blur(12px);\n  -webkit-backdrop-filter: blur(12px);\n}\n\n:host([variant=\"overlay\"]) .yh-bar {\n  min-height: 48px;\n  background: color-mix(in srgb, var(--yh-bg, #15121D) 72%, transparent);\n  border-bottom-color: transparent;\n}\n\n.yh-skip-link {\n  position: absolute;\n  left: -9999px;\n  top: 8px;\n  z-index: 60;\n  padding: 10px 16px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.875rem;\n  font-weight: 600;\n  text-decoration: none;\n}\n\n.yh-skip-link:focus,\n.yh-skip-link:focus-visible {\n  left: 16px;\n}\n\n.yh-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-nav {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-right {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  flex-shrink: 0;\n}\n\n.yh-account-desktop {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  position: relative;\n}\n\n.yh-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 0 14px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid transparent;\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  line-height: 1;\n  cursor: pointer;\n  text-decoration: none;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;\n}\n\n.yh-btn:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-btn-text:hover:not(:disabled) {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-btn-primary {\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n}\n\n.yh-btn-primary:hover:not(:disabled) {\n  filter: brightness(1.06);\n}\n\n.yh-btn-icon {\n  padding: 0;\n  width: 44px;\n  height: 44px;\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-btn-icon:hover:not(:disabled) {\n  color: var(--yh-ink, #F2EFF7);\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-account-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 4px 10px 4px 6px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color 150ms ease, border-color 150ms ease;\n}\n\n.yh-account-btn:hover {\n  background: color-mix(in srgb, var(--yh-surface, #1D1927) 86%, var(--yh-ink, #F2EFF7));\n}\n\n.yh-avatar {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.8125rem;\n  font-weight: 700;\n}\n\n.yh-avatar img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n\n.yh-account-name {\n  max-width: 16ch;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-chevron {\n  width: 16px;\n  height: 16px;\n  flex-shrink: 0;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-menu {\n  position: absolute;\n  top: calc(100% + 8px);\n  right: 0;\n  min-width: 240px;\n  padding: 8px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-surface, #1D1927);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);\n  z-index: 50;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu[hidden] {\n  display: none;\n}\n\n.yh-menu-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 8px 10px 10px;\n}\n\n.yh-menu-identity {\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu-name {\n  font-size: 0.875rem;\n  font-weight: 600;\n  color: var(--yh-ink, #F2EFF7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-email {\n  font-size: 0.75rem;\n  color: var(--yh-muted, #B8B3C7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-divider {\n  height: 1px;\n  margin: 4px 0;\n  background: var(--yh-border, rgba(255, 255, 255, 0.1));\n  border: 0;\n}\n\n.yh-menu-item {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  min-height: 44px;\n  padding: 0 12px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n  border: 0;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 500;\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.yh-menu-item:hover:not(:disabled),\n.yh-menu-item:focus-visible {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-menu-item:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-skeleton {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 44px;\n  padding: 0 6px;\n}\n\n.yh-skeleton-circle {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-skeleton-bar {\n  width: 72px;\n  height: 14px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-error-inline {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.yh-muted-text {\n  font-size: 0.8125rem;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-expired-notice,\n.yh-logout-notice {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-wrap: wrap;\n  gap: 12px;\n  padding: 8px 24px;\n  background: var(--yh-surface, #1D1927);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  font-size: 0.875rem;\n  color: var(--yh-ink, #F2EFF7);\n}\n\n.yh-mobile-toggle {\n  display: none;\n}\n\n.yh-sheet-backdrop {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.52);\n  z-index: 60;\n  display: flex;\n  justify-content: flex-end;\n}\n\n.yh-sheet-backdrop[hidden] {\n  display: none;\n}\n\n.yh-sheet {\n  width: 85vw;\n  max-width: 360px;\n  height: 100%;\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  border-left: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  padding: 16px;\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n  overflow-y: auto;\n}\n\n.yh-sheet-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n.yh-sheet-title {\n  font-size: 1rem;\n  font-weight: 700;\n}\n\n.yh-sheet-nav {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.yh-sheet-nav:empty {\n  display: none;\n}\n\n.yh-sheet-account {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-top: 12px;\n  border-top: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n}\n\n.yh-sheet-account-actions {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.yh-sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n:focus-visible {\n  outline: 2px solid var(--yh-focus, #A78BFA);\n  outline-offset: 2px;\n}\n\n@media (min-width: 641px) and (max-width: 1023px) {\n  .yh-account-name {\n    display: none;\n  }\n}\n\n@media (max-width: 640px) {\n  .yh-bar {\n    min-height: 56px;\n    padding: 0 16px;\n  }\n\n  .yh-nav,\n  .yh-account-desktop {\n    display: none;\n  }\n\n  .yh-mobile-toggle {\n    display: inline-flex;\n  }\n\n  .yh-expired-notice,\n  .yh-logout-notice {\n    padding: 8px 16px;\n  }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    transition: none !important;\n    animation: none !important;\n  }\n}\n";
 		let t = document.createElement("header");
 		t.setAttribute("part", "bar"), t.className = "yh-bar", this._skipLink = document.createElement("a"), this._skipLink.className = "yh-skip-link", this._skipLink.textContent = "Bỏ qua đến nội dung";
 		let n = document.createElement("div");
@@ -240,7 +285,7 @@ var f = class extends HTMLElement {
 		let a = document.createElement("div");
 		a.className = "yh-right";
 		let o = document.createElement("slot");
-		o.name = "actions", this._accountDesktop = document.createElement("div"), this._accountDesktop.className = "yh-account-desktop", this._mobileToggleBtn = document.createElement("button"), this._mobileToggleBtn.type = "button", this._mobileToggleBtn.className = "yh-btn yh-btn-icon yh-mobile-toggle", this._mobileToggleBtn.setAttribute("aria-label", "Mở menu"), this._mobileToggleBtn.setAttribute("aria-expanded", "false"), this._mobileToggleBtn.appendChild(u("M4 6h16M4 12h16M4 18h16")), this._mobileToggleBtn.addEventListener("click", () => {
+		o.name = "actions", this._accountDesktop = document.createElement("div"), this._accountDesktop.className = "yh-account-desktop", this._mobileToggleBtn = document.createElement("button"), this._mobileToggleBtn.type = "button", this._mobileToggleBtn.className = "yh-btn yh-btn-icon yh-mobile-toggle", this._mobileToggleBtn.setAttribute("aria-label", "Mở menu"), this._mobileToggleBtn.setAttribute("aria-expanded", "false"), this._mobileToggleBtn.appendChild(m("M4 6h16M4 12h16M4 18h16")), this._mobileToggleBtn.addEventListener("click", () => {
 			this._setSheetOpen(!this._sheetOpen, !1);
 		}), a.append(o, this._accountDesktop, this._mobileToggleBtn), t.append(this._skipLink, n, i, a), this._expiredNotice = document.createElement("div"), this._expiredNotice.className = "yh-expired-notice", this._expiredNotice.setAttribute("role", "status"), this._expiredNotice.hidden = !0;
 		let s = document.createElement("span");
@@ -248,17 +293,23 @@ var f = class extends HTMLElement {
 		let c = document.createElement("button");
 		c.type = "button", c.className = "yh-btn yh-btn-primary", c.textContent = "Đăng nhập lại", c.addEventListener("click", () => {
 			this._handleAuthClick("signin");
-		}), this._expiredNotice.append(s, c), this._sheetBackdrop = document.createElement("div"), this._sheetBackdrop.className = "yh-sheet-backdrop", this._sheetBackdrop.hidden = !0, this._sheetBackdrop.addEventListener("click", (e) => {
+		}), this._expiredNotice.append(s, c), this._logoutNotice = document.createElement("div"), this._logoutNotice.className = "yh-logout-notice", this._logoutNotice.setAttribute("role", "alert"), this._logoutNotice.hidden = !0;
+		let l = document.createElement("span");
+		l.textContent = "Đăng xuất không thành công, bạn vẫn đang đăng nhập.";
+		let u = document.createElement("button");
+		u.type = "button", u.className = "yh-btn yh-btn-primary", u.textContent = "Thử lại", u.addEventListener("click", () => {
+			this._handleLogout();
+		}), this._logoutNotice.append(l, u), this._sheetBackdrop = document.createElement("div"), this._sheetBackdrop.className = "yh-sheet-backdrop", this._sheetBackdrop.hidden = !0, this._sheetBackdrop.addEventListener("click", (e) => {
 			e.target === this._sheetBackdrop && this._setSheetOpen(!1, !0);
 		}), this._sheetDialog = document.createElement("div"), this._sheetDialog.className = "yh-sheet", this._sheetDialog.setAttribute("role", "dialog"), this._sheetDialog.setAttribute("aria-modal", "true"), this._sheetDialog.setAttribute("aria-label", "Menu"), this._sheetDialog.addEventListener("keydown", (e) => {
 			this._handleSheetKeyDown(e);
 		});
-		let l = document.createElement("div");
-		l.className = "yh-sheet-header";
-		let d = document.createElement("span");
-		d.className = "yh-sheet-title", d.textContent = "Menu", this._sheetCloseBtn = document.createElement("button"), this._sheetCloseBtn.type = "button", this._sheetCloseBtn.className = "yh-btn yh-btn-icon", this._sheetCloseBtn.setAttribute("aria-label", "Đóng menu"), this._sheetCloseBtn.appendChild(u("M18 6L6 18M6 6l12 12")), this._sheetCloseBtn.addEventListener("click", () => {
+		let d = document.createElement("div");
+		d.className = "yh-sheet-header";
+		let f = document.createElement("span");
+		f.className = "yh-sheet-title", f.textContent = "Menu", this._sheetCloseBtn = document.createElement("button"), this._sheetCloseBtn.type = "button", this._sheetCloseBtn.className = "yh-btn yh-btn-icon", this._sheetCloseBtn.setAttribute("aria-label", "Đóng menu"), this._sheetCloseBtn.appendChild(m("M18 6L6 18M6 6l12 12")), this._sheetCloseBtn.addEventListener("click", () => {
 			this._setSheetOpen(!1, !0);
-		}), l.append(d, this._sheetCloseBtn), this._sheetNav = document.createElement("div"), this._sheetNav.className = "yh-sheet-nav", this._sheetAccount = document.createElement("div"), this._sheetAccount.className = "yh-sheet-account", this._sheetDialog.append(l, this._sheetNav, this._sheetAccount), this._sheetBackdrop.appendChild(this._sheetDialog), this._liveRegion = document.createElement("div"), this._liveRegion.className = "yh-sr-only", this._liveRegion.setAttribute("aria-live", "polite"), this._liveRegion.setAttribute("aria-atomic", "true"), this._shadow.append(e, t, this._expiredNotice, this._sheetBackdrop, this._liveRegion);
+		}), d.append(f, this._sheetCloseBtn), this._sheetNav = document.createElement("div"), this._sheetNav.className = "yh-sheet-nav", this._sheetAccount = document.createElement("div"), this._sheetAccount.className = "yh-sheet-account", this._sheetDialog.append(d, this._sheetNav, this._sheetAccount), this._sheetBackdrop.appendChild(this._sheetDialog), this._liveRegion = document.createElement("div"), this._liveRegion.className = "yh-sr-only", this._liveRegion.setAttribute("aria-live", "polite"), this._liveRegion.setAttribute("aria-atomic", "true"), this._shadow.append(e, t, this._expiredNotice, this._logoutNotice, this._sheetBackdrop, this._liveRegion);
 	}
 	_syncAttributes() {
 		this._skipLink.href = this.skipTarget;
@@ -283,16 +334,16 @@ var f = class extends HTMLElement {
 			cancelable: !0
 		}), n = this.dispatchEvent(t);
 		if (this._sheetOpen && this._setSheetOpen(!1, !1), n) {
-			let t = encodeURIComponent(window.location.href);
+			let t = encodeURIComponent(u(window.location.href));
 			window.location.assign(`${this.authBase}/?auth=${e}&next=${t}`);
 		}
 	}
 	async _handleLogout() {
 		if (this._loggingOut) return;
-		this._loggingOut = !0, this._renderAccountRegions();
+		this._loggingOut = !0, this._logoutError = !1, this._renderAccountRegions();
 		let e = !1;
 		try {
-			let t = l();
+			let t = p();
 			e = (await fetch(`${this.authBase}/api/auth/logout`, {
 				method: "POST",
 				credentials: "include",
@@ -302,10 +353,10 @@ var f = class extends HTMLElement {
 			e = !1;
 		}
 		if (this._loggingOut = !1, this._menuOpen = !1, this._sheetOpen && this._setSheetOpen(!1, !1), !e) {
-			this._stale = !1, this._state = "error", this._lastStableState = "error", this._user = null, this._renderAccountRegions(), this._dispatchAuthChange();
+			this._logoutError = !0, this._renderAccountRegions();
 			return;
 		}
-		this._stale = !1, this._lastStableState = "signed-out", this._announce("Đã đăng xuất"), await this.refresh(), this.dispatchEvent(new CustomEvent("yh-logout", {
+		this._logoutError = !1, this._stale = !1, this._lastStableState = "signed-out", this._announce("Đã đăng xuất"), await this.refresh(), this.dispatchEvent(new CustomEvent("yh-logout", {
 			bubbles: !0,
 			composed: !0
 		}));
@@ -368,7 +419,7 @@ var f = class extends HTMLElement {
 	}
 	_renderAccountRegions() {
 		if (this._rendered) {
-			if (this._expiredNotice.hidden = this.hideAccount || this._state !== "expired", this.hideAccount) {
+			if (this._expiredNotice.hidden = this.hideAccount || this._state !== "expired", this._logoutNotice.hidden = this.hideAccount || !this._logoutError || this._state !== "signed-in", this.hideAccount) {
 				this._accountDesktop.hidden = !0, this._accountDesktop.replaceChildren(), this._sheetAccount.hidden = !0, this._sheetAccount.replaceChildren(), this._accountButtonEl = null, this._menuEl = null;
 				return;
 			}
@@ -391,7 +442,7 @@ var f = class extends HTMLElement {
 			let t = document.createElement("span");
 			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
 			let n = document.createElement("button");
-			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.title = "Thử lại", n.appendChild(u("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.title = "Thử lại", n.appendChild(m("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
 				this.refresh();
 			}), e.append(t, n), this._accountDesktop.appendChild(e);
 			return;
@@ -401,8 +452,8 @@ var f = class extends HTMLElement {
 			t.type = "button", t.className = "yh-account-btn", t.setAttribute("part", "account-button"), t.setAttribute("aria-haspopup", "menu"), t.setAttribute("aria-expanded", String(this._menuOpen)), t.setAttribute("aria-label", `Tài khoản: ${e.displayName}`);
 			let n = document.createElement("span");
 			n.className = "yh-account-name", n.textContent = e.displayName;
-			let r = u("M6 9l6 6 6-6", "yh-chevron");
-			t.append(d(e), n, r), t.addEventListener("click", () => {
+			let r = m("M6 9l6 6 6-6", "yh-chevron");
+			t.append(h(e), n, r), t.addEventListener("click", () => {
 				this._setMenuOpen(!this._menuOpen, !1);
 			}), t.addEventListener("keydown", (e) => {
 				e.key === "Enter" || e.key === " " || e.key === "ArrowDown" ? (e.preventDefault(), this._setMenuOpen(!0, !1), this._focusMenuItem(0)) : e.key === "Escape" && this._menuOpen && (e.preventDefault(), this._setMenuOpen(!1, !1));
@@ -418,17 +469,17 @@ var f = class extends HTMLElement {
 			let s = document.createElement("span");
 			s.className = "yh-menu-name", s.textContent = e.displayName;
 			let c = document.createElement("span");
-			c.className = "yh-menu-email", c.textContent = e.email ?? "", o.append(s, c), a.append(d(e), o);
+			c.className = "yh-menu-email", c.textContent = e.email ?? "", o.append(s, c), a.append(h(e), o);
 			let l = document.createElement("a");
 			l.className = "yh-menu-item", l.setAttribute("role", "menuitem"), l.href = this.profileUrl, l.textContent = "Hồ sơ";
-			let f = document.createElement("a");
-			f.className = "yh-menu-item", f.setAttribute("role", "menuitem"), f.href = this.authBase, f.textContent = "Về YunDev.space";
-			let p = document.createElement("hr");
-			p.className = "yh-menu-divider", p.setAttribute("role", "separator");
-			let m = document.createElement("button");
-			m.type = "button", m.className = "yh-menu-item", m.setAttribute("role", "menuitem"), m.disabled = this._loggingOut, m.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", m.addEventListener("click", () => {
+			let u = document.createElement("a");
+			u.className = "yh-menu-item", u.setAttribute("role", "menuitem"), u.href = this.authBase, u.textContent = "Về YunDev.space";
+			let d = document.createElement("hr");
+			d.className = "yh-menu-divider", d.setAttribute("role", "separator");
+			let f = document.createElement("button");
+			f.type = "button", f.className = "yh-menu-item", f.setAttribute("role", "menuitem"), f.disabled = this._loggingOut, f.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", f.addEventListener("click", () => {
 				this._handleLogout();
-			}), i.append(a, l, f, p, m), this._accountButtonEl = t, this._menuEl = i, this._accountDesktop.append(t, i);
+			}), i.append(a, l, u, d, f), this._accountButtonEl = t, this._menuEl = i, this._accountDesktop.append(t, i);
 			return;
 		}
 		let e = document.createElement("button");
@@ -456,7 +507,7 @@ var f = class extends HTMLElement {
 			let t = document.createElement("span");
 			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
 			let n = document.createElement("button");
-			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.appendChild(u("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.appendChild(m("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
 				this.refresh();
 			}), e.append(t, n), this._sheetAccount.appendChild(e);
 			return;
@@ -469,7 +520,7 @@ var f = class extends HTMLElement {
 			let r = document.createElement("span");
 			r.className = "yh-menu-name", r.textContent = e.displayName;
 			let i = document.createElement("span");
-			i.className = "yh-menu-email", i.textContent = e.email ?? "", n.append(r, i), t.append(d(e), n);
+			i.className = "yh-menu-email", i.textContent = e.email ?? "", n.append(r, i), t.append(h(e), n);
 			let a = document.createElement("div");
 			a.className = "yh-sheet-account-actions";
 			let o = document.createElement("a");
@@ -496,9 +547,9 @@ var f = class extends HTMLElement {
 };
 //#endregion
 //#region src/yun-header/index.ts
-function p(e = "yun-header") {
-	typeof customElements < "u" && !customElements.get(e) && customElements.define(e, f);
+function _(e = "yun-header") {
+	typeof customElements < "u" && !customElements.get(e) && customElements.define(e, g);
 }
-p();
+_();
 //#endregion
-export { f as YunHeader, p as defineYunHeader };
+export { g as YunHeader, _ as defineYunHeader, s as isAllowedAuthOrigin };

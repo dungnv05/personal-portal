@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   publicDir: false,
+  define: {
+    'import.meta.env.DEV': 'false',
+  },
   build: {
     lib: {
       entry: 'src/yun-header/index.ts',
