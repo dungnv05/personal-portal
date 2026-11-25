@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite'
+import { bundleSecretGuard } from './scripts/bundle-secret-guard.mjs'
 
 export default defineConfig({
   publicDir: false,
+  plugins: [bundleSecretGuard()],
   define: {
     'import.meta.env.DEV': 'false',
   },
