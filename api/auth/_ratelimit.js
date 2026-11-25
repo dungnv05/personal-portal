@@ -18,10 +18,26 @@ const MAX_MEMORY_KEYS = 10000;
 const UPSTASH_TIMEOUT_MS = 800;
 const memoryStore = new Map();
 let warnedMissingUpstashInProd = false;
+let warnedUpstashError = false;
 
 export function resetMemoryRateLimitStore() {
   memoryStore.clear();
   warnedMissingUpstashInProd = false;
+  warnedUpstashError = false;
+}
+
+export function isSharedRateLimitConfigured() {
+  return Boolean(
+    (process.env.UPSTASH_REDIS_REST_URL || '').trim() &&
+      (process.env.UPSTASH_REDIS_REST_TOKEN || '').trim(),
+  );
+}
+
+function warnUpstashErrorOnce() {
+  if (!warnedUpstashError) {
+    warnedUpstashError = true;
+    console.warn('[ratelimit] Upstash request failed; using per-instance in-memory limiter');
+  }
 }
 
 export function getClientIp(req) {
@@ -139,6 +155,7 @@ export async function rateLimit(req, res, { bucket, limit, windowSec = 60, key }
     try {
       outcome = await incrementUpstash(upstashUrl, upstashToken, storeKey, windowSec);
     } catch {
+      warnUpstashErrorOnce();
       outcome = incrementMemory(storeKey, windowSec);
     }
   } else {
