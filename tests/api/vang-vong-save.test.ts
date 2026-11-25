@@ -307,7 +307,7 @@ describe('vang-vong cloud-save schema module', () => {
     });
   });
 
-  it('9. enforces lastIdleClaimTime bounds', () => {
+  it('9. enforces lastIdleClaimTime minimum and clamps future timestamps to nowMs', () => {
     expect(
       validateVangVongSave(validSave({ lastIdleClaimTime: Date.UTC(2023, 11, 31) }), {
         nowMs: FIXED_NOW,
@@ -318,21 +318,22 @@ describe('vang-vong cloud-save schema module', () => {
       path: 'lastIdleClaimTime',
     });
 
-    expect(
-      validateVangVongSave(validSave({ lastIdleClaimTime: FIXED_NOW + 300001 }), {
-        nowMs: FIXED_NOW,
-      }),
-    ).toEqual({
-      ok: false,
-      error: 'invalid_save',
-      path: 'lastIdleClaimTime',
-    });
+    const futureRes = validateVangVongSave(
+      validSave({ lastIdleClaimTime: FIXED_NOW + 10 * 60 * 1000 }),
+      { nowMs: FIXED_NOW },
+    );
+    expect(futureRes.ok).toBe(true);
+    if (futureRes.ok) {
+      expect(futureRes.value.lastIdleClaimTime).toBe(FIXED_NOW);
+    }
 
-    expect(
-      validateVangVongSave(validSave({ lastIdleClaimTime: FIXED_NOW + 300000 }), {
-        nowMs: FIXED_NOW,
-      }).ok,
-    ).toBe(true);
+    const pastRes = validateVangVongSave(validSave({ lastIdleClaimTime: FIXED_NOW - 1000 }), {
+      nowMs: FIXED_NOW,
+    });
+    expect(pastRes.ok).toBe(true);
+    if (pastRes.ok) {
+      expect(pastRes.value.lastIdleClaimTime).toBe(FIXED_NOW - 1000);
+    }
   });
 
   it('10. enforces string rules (surrogates, NFC, control chars, length, and redacted shard paths)', () => {
@@ -591,6 +592,40 @@ describe('vang-vong cloud-save schema module', () => {
         error: 'invalid_save',
         path: 'heroes[0].level',
       });
+    });
+
+    it('clamps pre-2024 and far-future lastIdleClaimTime values and falls back for non-numbers', () => {
+      const minIdleClaimMs = Date.UTC(2024, 0, 1);
+      const baseHeroes = [
+        {
+          id: 'hero_1',
+          name: 'Lê Lợi',
+          level: 1,
+          stars: 1,
+          slotIndex: 0,
+          equippedItemIds: [],
+        },
+      ];
+
+      const pre2024 = mapLegacyVangVongState(
+        { lastIdleClaimTime: 1600000000000, heroes: baseHeroes },
+        { nowMs: FIXED_NOW },
+      );
+      expect(pre2024?.lastIdleClaimTime).toBe(minIdleClaimMs);
+      expect(validateVangVongSave(pre2024, { nowMs: FIXED_NOW }).ok).toBe(true);
+
+      const farFuture = mapLegacyVangVongState(
+        { lastIdleClaimTime: FIXED_NOW + 365 * 24 * 60 * 60 * 1000, heroes: baseHeroes },
+        { nowMs: FIXED_NOW },
+      );
+      expect(farFuture?.lastIdleClaimTime).toBe(FIXED_NOW);
+      expect(validateVangVongSave(farFuture, { nowMs: FIXED_NOW }).ok).toBe(true);
+
+      const nonNumber = mapLegacyVangVongState(
+        { lastIdleClaimTime: 'not-a-number', heroes: baseHeroes },
+        { nowMs: FIXED_NOW },
+      );
+      expect(nonNumber?.lastIdleClaimTime).toBe(FIXED_NOW);
     });
   });
 });

@@ -4,7 +4,6 @@ export const VANG_VONG_SUPPORTED_SCHEMA_VERSIONS = Object.freeze([1]);
 export const VANG_VONG_MAX_DATA_BYTES = 65536;
 
 const MIN_IDLE_CLAIM_MS = Date.UTC(2024, 0, 1);
-const MAX_IDLE_CLAIM_FUTURE_SKEW_MS = 300000;
 const MAX_HEROES = 64;
 const MAX_EQUIPPED_ITEMS = 8;
 const MAX_SHARD_KEYS = 64;
@@ -292,11 +291,12 @@ export function validateVangVongSave(input, { nowMs = Date.now() } = {}) {
 
   if (
     !Number.isSafeInteger(input.lastIdleClaimTime) ||
-    input.lastIdleClaimTime < MIN_IDLE_CLAIM_MS ||
-    input.lastIdleClaimTime > nowMs + MAX_IDLE_CLAIM_FUTURE_SKEW_MS
+    input.lastIdleClaimTime < MIN_IDLE_CLAIM_MS
   ) {
     return fail('invalid_save', 'lastIdleClaimTime');
   }
+  const normalizedLastIdleClaimTime =
+    input.lastIdleClaimTime > nowMs ? nowMs : input.lastIdleClaimTime;
 
   if (typeof input.isMuted !== 'boolean') {
     return fail('invalid_save', 'isMuted');
@@ -346,7 +346,7 @@ export function validateVangVongSave(input, { nowMs = Date.now() } = {}) {
     pvpScore: input.pvpScore,
     rankLevel: input.rankLevel,
     battleSpeed: input.battleSpeed,
-    lastIdleClaimTime: input.lastIdleClaimTime,
+    lastIdleClaimTime: normalizedLastIdleClaimTime,
     isMuted: input.isMuted,
     activeBeastId: input.activeBeastId,
     heroes: normalizedHeroes,
@@ -384,8 +384,9 @@ export function mapLegacyVangVongState(legacy, { nowMs = Date.now() } = {}) {
   for (let i = 0; i < LEGACY_SCALAR_DEFAULTS.length; i += 1) {
     const [key, defaultValue] = LEGACY_SCALAR_DEFAULTS[i];
     if (key === 'isMuted') {
-      result.lastIdleClaimTime = hasOwn(legacy, 'lastIdleClaimTime')
-        ? legacy.lastIdleClaimTime
+      const rawClaim = hasOwn(legacy, 'lastIdleClaimTime') ? legacy.lastIdleClaimTime : undefined;
+      result.lastIdleClaimTime = Number.isFinite(rawClaim)
+        ? Math.trunc(Math.min(Math.max(rawClaim, MIN_IDLE_CLAIM_MS), nowMs))
         : nowMs;
     }
     result[key] = hasOwn(legacy, key) ? legacy[key] : defaultValue;
