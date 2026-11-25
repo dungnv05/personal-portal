@@ -818,4 +818,65 @@ describe('GET / PUT /api/pregnancy', () => {
     expect(res.body).toEqual({ ok: false, error: 'storage_error' })
     expect(warnSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('PUT dueDate null without x-csrf-token -> 403 csrf_mismatch and no PostgREST call', async () => {
+    const token = makeAccessCookie()
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/auth/v1/user')) {
+        return new Response(JSON.stringify({ id: USER_A }), { status: 200 })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = createMockRes()
+    await pregnancyHandler(
+      createMockReq({
+        method: 'PUT',
+        headers: {
+          origin: ORIGIN,
+          cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
+          'content-type': 'application/json',
+          'content-length': '16',
+        },
+        body: { dueDate: null },
+      }),
+      res,
+    )
+
+    expect(res.statusCode).toBe(403)
+    expect(res.body).toEqual({ ok: false, error: 'csrf_mismatch' })
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/rest/v1/'))).toBe(false)
+  })
+
+  it('PUT dueDate null with Origin https://evil.example -> 403 and no PostgREST call', async () => {
+    const token = makeAccessCookie()
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/auth/v1/user')) {
+        return new Response(JSON.stringify({ id: USER_A }), { status: 200 })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = createMockRes()
+    await pregnancyHandler(
+      createMockReq({
+        method: 'PUT',
+        headers: {
+          origin: 'https://evil.example',
+          cookie: `sb_access=${token}; csrf=${VALID_CSRF}`,
+          'x-csrf-token': VALID_CSRF,
+          'content-type': 'application/json',
+          'content-length': '16',
+        },
+        body: { dueDate: null },
+      }),
+      res,
+    )
+
+    expect(res.statusCode).toBe(403)
+    expect(res.body).toEqual({ ok: false, error: 'origin_forbidden' })
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/rest/v1/'))).toBe(false)
+  })
 })
