@@ -1,5 +1,6 @@
 import { isAllowedHost } from '../../shared/allowed-origins.js'
 import { sharedRefresh } from '../shared-auth/refreshCoordinator'
+import { resolveTheme, setTheme, THEME_EVENT, type YunTheme } from './theme'
 
 export type YunHeaderApp = 'portal' | 'tinh-luong' | 'brse' | 'vang-vong' | 'ivf'
 export type YunHeaderVariant = 'bar' | 'overlay'
@@ -98,8 +99,33 @@ const STYLES = `
 .yh-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex-shrink: 0;
+}
+
+.yh-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: var(--yh-toggle-radius, 12px);
+  border: 1px solid var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1)));
+  background: transparent;
+  color: var(--yh-muted, #B8B3C7);
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.yh-theme-toggle[hidden] {
+  display: none;
+}
+
+.yh-theme-toggle:hover {
+  background: var(--yh-toggle-hover-bg, color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent));
+  color: var(--yh-ink, #F2EFF7);
 }
 
 .yh-account-desktop {
@@ -681,7 +707,7 @@ function readCsrfCookie(): string {
   return matched
 }
 
-function createSvgIcon(pathD: string, className?: string): SVGSVGElement {
+function createSvgBase(className?: string): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(ns, 'svg')
   svg.setAttribute('viewBox', '0 0 24 24')
@@ -696,9 +722,46 @@ function createSvgIcon(pathD: string, className?: string): SVGSVGElement {
   if (className) {
     svg.setAttribute('class', className)
   }
+  return svg
+}
+
+function createSvgIcon(pathD: string, className?: string): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = createSvgBase(className)
   const path = document.createElementNS(ns, 'path')
   path.setAttribute('d', pathD)
   svg.appendChild(path)
+  return svg
+}
+
+function createMoonIcon(): SVGSVGElement {
+  return createSvgIcon('M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z')
+}
+
+function createSunIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = createSvgBase()
+  const circle = document.createElementNS(ns, 'circle')
+  circle.setAttribute('cx', '12')
+  circle.setAttribute('cy', '12')
+  circle.setAttribute('r', '4')
+  svg.appendChild(circle)
+
+  const rays = [
+    'M12 2v2',
+    'M12 20v2',
+    'm4.93 4.93 1.41 1.41',
+    'm17.66 17.66 1.41 1.41',
+    'M2 12h2',
+    'M20 12h2',
+    'm6.34 17.66-1.41 1.41',
+    'm19.07 4.93-1.41 1.41',
+  ]
+  for (const d of rays) {
+    const path = document.createElementNS(ns, 'path')
+    path.setAttribute('d', d)
+    svg.appendChild(path)
+  }
   return svg
 }
 
@@ -726,7 +789,7 @@ function createAvatarNode(user: YunHeaderUser): HTMLElement {
 
 export class YunHeader extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['app', 'auth-base', 'variant', 'profile-url', 'hide-account', 'skip-target']
+    return ['app', 'auth-base', 'variant', 'profile-url', 'hide-account', 'skip-target', 'no-theme-toggle']
   }
 
   private _state: YunHeaderState = 'loading'
@@ -744,6 +807,7 @@ export class YunHeader extends HTMLElement {
 
   private _shadow: ShadowRoot
   private _skipLink!: HTMLAnchorElement
+  private _themeBtn!: HTMLButtonElement
   private _accountDesktop!: HTMLDivElement
   private _expiredNotice!: HTMLDivElement
   private _logoutNotice!: HTMLDivElement
@@ -790,6 +854,10 @@ export class YunHeader extends HTMLElement {
     }
   }
 
+  private readonly _onThemeChange = () => {
+    this._renderThemeButton()
+  }
+
   constructor() {
     super()
     this._shadow = this.attachShadow({ mode: 'open' })
@@ -805,6 +873,18 @@ export class YunHeader extends HTMLElement {
 
   get stale(): boolean {
     return this._stale
+  }
+
+  get theme(): YunTheme {
+    const attr = document.documentElement.dataset.theme
+    if (attr === 'light' || attr === 'dark') {
+      return attr
+    }
+    return resolveTheme()
+  }
+
+  setTheme(theme: YunTheme): void {
+    setTheme(theme)
   }
 
   private get authBase(): string {
@@ -827,10 +907,12 @@ export class YunHeader extends HTMLElement {
   connectedCallback(): void {
     this._ensureDom()
     this._syncAttributes()
+    this._renderThemeButton()
     window.addEventListener('focus', this._onWindowFocus)
     document.addEventListener('visibilitychange', this._onVisibilityChange)
     document.addEventListener('click', this._onDocumentClick)
     document.addEventListener('keydown', this._onDocumentKeyDown)
+    document.addEventListener(THEME_EVENT, this._onThemeChange)
     void this.refresh()
   }
 
@@ -839,6 +921,7 @@ export class YunHeader extends HTMLElement {
     document.removeEventListener('visibilitychange', this._onVisibilityChange)
     document.removeEventListener('click', this._onDocumentClick)
     document.removeEventListener('keydown', this._onDocumentKeyDown)
+    document.removeEventListener(THEME_EVENT, this._onThemeChange)
     this._abortPending()
   }
 
@@ -1067,6 +1150,16 @@ export class YunHeader extends HTMLElement {
     right.className = 'yh-right'
     const actionsSlot = document.createElement('slot')
     actionsSlot.name = 'actions'
+
+    this._themeBtn = document.createElement('button')
+    this._themeBtn.type = 'button'
+    this._themeBtn.className = 'yh-theme-toggle'
+    this._themeBtn.title = 'Chuyển chế độ sáng/tối'
+    this._themeBtn.setAttribute('aria-label', 'Chuyển chế độ sáng/tối')
+    this._themeBtn.addEventListener('click', () => {
+      this.setTheme(this.theme === 'dark' ? 'light' : 'dark')
+    })
+
     this._accountDesktop = document.createElement('div')
     this._accountDesktop.className = 'yh-account-desktop'
 
@@ -1080,7 +1173,7 @@ export class YunHeader extends HTMLElement {
       this._setSheetOpen(!this._sheetOpen, false)
     })
 
-    right.append(actionsSlot, this._accountDesktop, this._mobileToggleBtn)
+    right.append(actionsSlot, this._themeBtn, this._accountDesktop, this._mobileToggleBtn)
     header.append(this._skipLink, left, nav, right)
 
     this._expiredNotice = document.createElement('div')
@@ -1174,6 +1267,16 @@ export class YunHeader extends HTMLElement {
 
   private _syncAttributes(): void {
     this._skipLink.href = this.skipTarget
+    this._themeBtn.hidden = this.hasAttribute('no-theme-toggle')
+  }
+
+  private _renderThemeButton(): void {
+    if (!this._themeBtn) {
+      return
+    }
+    const isDark = this.theme === 'dark'
+    this._themeBtn.setAttribute('aria-pressed', String(isDark))
+    this._themeBtn.replaceChildren(isDark ? createSunIcon() : createMoonIcon())
   }
 
   private _announce(message: string): void {

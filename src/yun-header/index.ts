@@ -8,9 +8,26 @@ import {
   type YunHeaderUser,
   type YunHeaderVariant,
 } from './yun-header'
+import {
+  initTheme,
+  resolveTheme,
+  setTheme,
+  THEME_COOKIE,
+  THEME_EVENT,
+  THEME_STORAGE_KEY,
+  type YunTheme,
+  type YunThemeChangeDetail,
+  type YunThemeSource,
+} from './theme'
 
 export {
+  initTheme,
   isAllowedAuthOrigin,
+  resolveTheme,
+  setTheme,
+  THEME_COOKIE,
+  THEME_EVENT,
+  THEME_STORAGE_KEY,
   YunHeader,
   type YunHeaderApp,
   type YunHeaderAuthChangeDetail,
@@ -18,6 +35,9 @@ export {
   type YunHeaderState,
   type YunHeaderUser,
   type YunHeaderVariant,
+  type YunTheme,
+  type YunThemeChangeDetail,
+  type YunThemeSource,
 }
 
 export function defineYunHeader(tagName = 'yun-header'): void {
@@ -26,4 +46,5 @@ export function defineYunHeader(tagName = 'yun-header'): void {
   }
 }
 
+initTheme()
 defineYunHeader()
