@@ -31,9 +31,11 @@ export const LEGACY_STORAGE_KEYS = [
 
 const CSRF_COOKIE_NAME = 'csrf'
 
-const env = import.meta.env as Record<string, string | undefined>
-const rawUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL || ''
-const rawKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || ''
+
+const rawUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim()
+const rawKey = String(
+  import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '',
+).trim()
 
 const isDummyUrl =
   !rawUrl || rawUrl.includes('your-project') || rawUrl.includes('abcdefghijklmnopqrst')
