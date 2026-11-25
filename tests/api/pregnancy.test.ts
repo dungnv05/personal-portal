@@ -611,4 +611,43 @@ describe('GET / PUT /api/pregnancy', () => {
     expect(source).not.toContain('SERVICE_ROLE')
     expect(source).not.toContain('SECRET_KEY')
   })
+
+  it('14. outside dev with KV_REST_API_URL/TOKEN fallback -> not 503 ratelimit_unavailable and calls KV URL for rate limit', async () => {
+    const kvUrl = 'https://kv.example.upstash.io'
+    const kvToken = 'test-kv-token'
+    process.env.VERCEL_ENV = 'production'
+    process.env.VERCEL = '1'
+    process.env.KV_REST_API_URL = kvUrl
+    process.env.KV_REST_API_TOKEN = kvToken
+
+    const token = makeAccessCookie()
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith(kvUrl)) {
+        return new Response(JSON.stringify([{ result: 1 }, { result: 1 }, { result: 60000 }]), { status: 200 })
+      }
+      if (url.includes('/auth/v1/user')) {
+        return new Response(JSON.stringify({ id: USER_A }), { status: 200 })
+      }
+      if (url.includes('/rest/v1/pregnancy_profiles')) {
+        return new Response(JSON.stringify([]), { status: 200 })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = createMockRes()
+    await pregnancyHandler(
+      createMockReq({
+        method: 'GET',
+        headers: { origin: ORIGIN, cookie: `sb_access=${token}` },
+      }),
+      res,
+    )
+
+    expect(res.statusCode).not.toBe(503)
+    expect(res.body).not.toEqual({ ok: false, error: 'ratelimit_unavailable' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toEqual({ ok: true, dueDate: null, updatedAt: null })
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith(kvUrl))).toBe(true)
+  })
 })

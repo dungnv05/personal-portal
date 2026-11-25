@@ -59,7 +59,7 @@ begin
 end
 $$;
 
--- Case 3: Changing user_id raises
+-- Case 3: Changing user_id raises trigger error (23514)
 do $$
 declare
   v_raised boolean := false;
@@ -69,7 +69,10 @@ begin
     set user_id = '00000000-0000-0000-0000-0000000000a2'
     where user_id = '00000000-0000-0000-0000-0000000000a1';
   exception
-    when others then
+    when sqlstate '23514' then
+      if sqlerrm <> 'pregnancy_profiles: user_id change not allowed' then
+        raise exception 'FAIL case 3: unexpected 23514 message: %', sqlerrm;
+      end if;
       v_raised := true;
   end;
 
@@ -92,8 +95,6 @@ begin
     where user_id = '00000000-0000-0000-0000-0000000000a1';
   exception
     when check_violation then
-      v_raised := true;
-    when others then
       v_raised := true;
   end;
 
@@ -141,8 +142,6 @@ begin
   exception
     when insufficient_privilege then
       v_raised := true;
-    when others then
-      v_raised := true;
   end;
 
   if not v_raised then
@@ -162,8 +161,6 @@ begin
     execute 'truncate public.pregnancy_profiles';
   exception
     when insufficient_privilege then
-      v_raised := true;
-    when others then
       v_raised := true;
   end;
 
@@ -188,8 +185,6 @@ begin
   exception
     when insufficient_privilege then
       v_raised := true;
-    when others then
-      v_raised := true;
   end;
 
   if not v_raised then
@@ -210,6 +205,48 @@ begin
   end if;
 
   raise notice 'PASS case 8';
+end
+$$;
+
+-- Case 9: Trigger user_id guard independent of RLS: same user_id succeeds, different user_id raises trigger error (23514)
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '00000000-0000-0000-0000-0000000000a1', 'role', 'authenticated')::text,
+  true
+);
+
+do $$
+declare
+  v_row public.pregnancy_profiles%rowtype;
+  v_raised boolean := false;
+begin
+  update public.pregnancy_profiles
+  set user_id = '00000000-0000-0000-0000-0000000000a1'
+  where user_id = '00000000-0000-0000-0000-0000000000a1'
+  returning * into v_row;
+
+  if not found or v_row.user_id <> '00000000-0000-0000-0000-0000000000a1' then
+    raise exception 'FAIL case 9: updating user_id to same id should succeed';
+  end if;
+
+  begin
+    update public.pregnancy_profiles
+    set user_id = '00000000-0000-0000-0000-0000000000a2'
+    where user_id = '00000000-0000-0000-0000-0000000000a1';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm <> 'pregnancy_profiles: user_id change not allowed' then
+        raise exception 'FAIL case 9: unexpected 23514 message: %', sqlerrm;
+      end if;
+      v_raised := true;
+  end;
+
+  if not v_raised then
+    raise exception 'FAIL case 9: changing user_id should have raised trigger error';
+  end if;
+
+  raise notice 'PASS case 9';
 end
 $$;
 
