@@ -89,6 +89,17 @@ describe('App ?next= auto-redirect', () => {
     const parsedGuard = JSON.parse(rawGuard!) as { url: string; at: number }
     expect(parsedGuard.url).toBe(TARGET_URL)
     expect(typeof parsedGuard.at).toBe('number')
+
+    mockGetSessionUser.mockResolvedValueOnce({ ...SAMPLE_USER })
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    await waitFor(() => {
+      expect(mockGetSessionUser).toHaveBeenCalledTimes(2)
+    })
+    expect(mockReplaceLocation).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.auth-next-loop-notice')).not.toBeInTheDocument()
   })
 
   it('(b) shows non-blocking notice and does not auto-redirect when guard blocks repeat redirect', async () => {
@@ -119,7 +130,7 @@ describe('App ?next= auto-redirect', () => {
     mockGetSessionUser.mockReturnValue(deferred.promise)
     window.history.replaceState({}, '', `/?next=${encodeURIComponent(TARGET_URL)}`)
 
-    render(<App />)
+    const { container } = render(<App />)
     expect(screen.queryByText('Đăng Nhập YunDev')).not.toBeInTheDocument()
 
     await act(async () => {
@@ -130,6 +141,19 @@ describe('App ?next= auto-redirect', () => {
     expect(await screen.findByText('Đăng Nhập YunDev')).toBeInTheDocument()
     expect(screen.getByText('Sign in to continue to brse.yundev.space')).toBeInTheDocument()
     expect(mockReplaceLocation).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }))
+    expect(container.querySelector('.auth-modal-card')).not.toBeInTheDocument()
+
+    mockGetSessionUser.mockResolvedValueOnce(null)
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    await waitFor(() => {
+      expect(mockGetSessionUser).toHaveBeenCalledTimes(2)
+    })
+    expect(container.querySelector('.auth-modal-card')).not.toBeInTheDocument()
   })
 
   it('(e) does not redirect for invalid next URL when signed in', async () => {

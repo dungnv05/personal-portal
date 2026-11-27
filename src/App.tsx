@@ -168,7 +168,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || hasAutoRedirectedRef.current) {
       return
     }
     const action = decideNextAction({
@@ -199,9 +199,6 @@ function App() {
       return
     }
 
-    if (hasAutoRedirectedRef.current) {
-      return
-    }
     const storage = readSessionStorageSafe()
     if (!recordNextRedirect(storage, action.url, Date.now())) {
       setBlockedNextUrl(action.url)
