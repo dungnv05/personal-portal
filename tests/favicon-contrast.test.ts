@@ -307,6 +307,21 @@ describe('WCAG 2.x contrast and theme tokens', () => {
       contrastRatio(btnBorder, colorOf('--bg', lightAttr, dark)),
       'Light --btn-secondary-border on --bg',
     ).toBeGreaterThanOrEqual(3);
+
+    const lightBgSoft = colorOf('--bg-soft', lightAttr, dark);
+    expect(
+      contrastRatio(colorOf('--muted', lightAttr, dark), lightBgSoft),
+      'Light --muted on --bg-soft',
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(colorOf('--text', lightAttr, dark), lightBgSoft),
+      'Light --text on --bg-soft',
+    ).toBeGreaterThanOrEqual(4.5);
+    const disabledPeachBg = compositeOver(colorOf('--peach-soft', lightAttr, dark), lightBgSoft);
+    expect(
+      contrastRatio(colorOf('--peach-text', lightAttr, dark), disabledPeachBg),
+      'Light --peach-text on --peach-soft over --bg-soft',
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   it('dark theme meets WCAG AA contrast ratios', () => {
@@ -365,6 +380,21 @@ describe('WCAG 2.x contrast and theme tokens', () => {
       contrastRatio(btnBorder, darkSurface),
       'Dark --btn-secondary-border on --surface',
     ).toBeGreaterThanOrEqual(3);
+
+    const darkBgSoft = colorOf('--bg-soft', dark, dark);
+    expect(
+      contrastRatio(colorOf('--muted', dark, dark), darkBgSoft),
+      'Dark --muted on --bg-soft',
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(colorOf('--text', dark, dark), darkBgSoft),
+      'Dark --text on --bg-soft',
+    ).toBeGreaterThanOrEqual(4.5);
+    const disabledPeachBg = compositeOver(colorOf('--peach-soft', dark, dark), darkBgSoft);
+    expect(
+      contrastRatio(colorOf('--peach-text', dark, dark), disabledPeachBg),
+      'Dark --peach-text on --peach-soft over --bg-soft',
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   it('App.css wires status badges and auth input borders to the contrast tokens', () => {
@@ -374,5 +404,20 @@ describe('WCAG 2.x contrast and theme tokens', () => {
     expect(appCss).toMatch(/\.auth-input-group\s+input\s*\{[^}]*border:\s*1px\s+solid\s+var\(--input-border\)/s);
     expect(appCss).toMatch(/\.profile-feedback-success\s*\{[^}]*color:\s*var\(--mint-text\)/s);
     expect(appCss).toMatch(/\.auth-alert-success\s*\{[^}]*color:\s*var\(--mint-text\)/s);
+  });
+
+  it('App.css disabled card and button rules avoid text opacity and use --bg-soft', () => {
+    const appCss = readFile('src/App.css');
+
+    const cardMatch = /\.app-card-disabled\s*\{/.exec(appCss);
+    expect(cardMatch).not.toBeNull();
+    const cardBody = extractBraceBlock(appCss, cardMatch!.index + cardMatch![0].length - 1);
+    expect(cardBody).not.toMatch(/\bopacity\s*:/i);
+    expect(cardBody).toMatch(/background:\s*var\(--bg-soft\)/);
+
+    const btnMatch = /\.btn-launch-disabled\s*\{/.exec(appCss);
+    expect(btnMatch).not.toBeNull();
+    const btnBody = extractBraceBlock(appCss, btnMatch!.index + btnMatch![0].length - 1);
+    expect(btnBody).not.toMatch(/\bopacity\s*:/i);
   });
 });
