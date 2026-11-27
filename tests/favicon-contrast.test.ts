@@ -259,22 +259,43 @@ describe('WCAG 2.x contrast and theme tokens', () => {
       }
     }
 
-    const mintBg = compositeOver(colorOf('--mint-soft', lightAttr, dark), white);
+    const lightSurface = colorOf('--surface', lightAttr, dark);
+    const lightBg = colorOf('--bg', lightAttr, dark);
+
+    const mintBg = compositeOver(colorOf('--mint-soft', lightAttr, dark), lightSurface);
     expect(
       contrastRatio(colorOf('--mint-text', lightAttr, dark), mintBg),
       'Light --mint-text on --mint-soft',
     ).toBeGreaterThanOrEqual(4.5);
 
-    const peachBg = compositeOver(colorOf('--peach-soft', lightAttr, dark), white);
+    const peachBg = compositeOver(colorOf('--peach-soft', lightAttr, dark), lightSurface);
     expect(
       contrastRatio(colorOf('--peach-text', lightAttr, dark), peachBg),
       'Light --peach-text on --peach-soft',
     ).toBeGreaterThanOrEqual(4.5);
 
-    const accentBg = compositeOver(colorOf('--accent-soft', lightAttr, dark), white);
+    const accentBg = compositeOver(colorOf('--accent-soft', lightAttr, dark), lightSurface);
     expect(
       contrastRatio(colorOf('--accent-badge-text', lightAttr, dark), accentBg),
       'Light --accent-badge-text on --accent-soft',
+    ).toBeGreaterThanOrEqual(4.5);
+
+    const heroAccentBg = compositeOver(colorOf('--accent-soft', lightAttr, dark), lightBg);
+    expect(
+      contrastRatio(colorOf('--accent-badge-text', lightAttr, dark), heroAccentBg),
+      'Light --accent-badge-text on --accent-soft over --bg',
+    ).toBeGreaterThanOrEqual(4.5);
+
+    const danger = colorOf('--danger', lightAttr, dark);
+    expect(
+      contrastRatio(danger, lightSurface),
+      'Light --danger on --surface',
+    ).toBeGreaterThanOrEqual(4.5);
+
+    const dangerBg = compositeOver(colorOf('--danger-soft', lightAttr, dark), lightSurface);
+    expect(
+      contrastRatio(danger, dangerBg),
+      'Light --danger on --danger-soft',
     ).toBeGreaterThanOrEqual(4.5);
 
     const btnBorder = colorOf('--btn-secondary-border', lightAttr, dark);
@@ -290,7 +311,7 @@ describe('WCAG 2.x contrast and theme tokens', () => {
 
   it('dark theme meets WCAG AA contrast ratios', () => {
     const surfaces = ['--bg', '--surface', '--surface-2'] as const;
-    const textTokens = ['--text', '--muted', '--accent-text'] as const;
+    const textTokens = ['--text', '--muted', '--accent-text', '--accent-badge-text'] as const;
 
     for (const fgToken of textTokens) {
       const fg = colorOf(fgToken, dark, dark);
@@ -323,6 +344,18 @@ describe('WCAG 2.x contrast and theme tokens', () => {
       'Dark --accent-badge-text on --accent-soft',
     ).toBeGreaterThanOrEqual(4.5);
 
+    const danger = colorOf('--danger', dark, dark);
+    expect(
+      contrastRatio(danger, darkSurface),
+      'Dark --danger on --surface',
+    ).toBeGreaterThanOrEqual(4.5);
+
+    const dangerBg = compositeOver(colorOf('--danger-soft', dark, dark), darkSurface);
+    expect(
+      contrastRatio(danger, dangerBg),
+      'Dark --danger on --danger-soft',
+    ).toBeGreaterThanOrEqual(4.5);
+
     const btnBorder = colorOf('--btn-secondary-border', dark, dark);
     expect(
       contrastRatio(btnBorder, colorOf('--bg', dark, dark)),
@@ -339,5 +372,7 @@ describe('WCAG 2.x contrast and theme tokens', () => {
     expect(appCss).toMatch(/\.status-active\s*\{[^}]*color:\s*var\(--mint-text\)/s);
     expect(appCss).toMatch(/\.status-dev\s*\{[^}]*color:\s*var\(--peach-text\)/s);
     expect(appCss).toMatch(/\.auth-input-group\s+input\s*\{[^}]*border:\s*1px\s+solid\s+var\(--input-border\)/s);
+    expect(appCss).toMatch(/\.profile-feedback-success\s*\{[^}]*color:\s*var\(--mint-text\)/s);
+    expect(appCss).toMatch(/\.auth-alert-success\s*\{[^}]*color:\s*var\(--mint-text\)/s);
   });
 });

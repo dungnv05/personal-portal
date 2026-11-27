@@ -115,7 +115,7 @@ yun-header {
 }
 
 .profile-feedback-success {
-  color: var(--mint);
+  color: var(--mint-text);
 }
 
 .profile-feedback-error {
