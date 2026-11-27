@@ -20,8 +20,16 @@ import {
   type SessionUser,
 } from './utils/sharedAuth'
 import type { YunHeader, YunHeaderAuthChangeDetail } from './yun-header'
-import { getNextTargetLabel } from './utils/nextParam'
+import { getNextTargetLabel, hasNextParam } from './utils/nextParam'
 import { resolveNextUrl } from './utils/nextUrl'
+import { assignLocation, replaceLocation } from './utils/navigation'
+import {
+  clearNextRedirectGuard,
+  decideNextAction,
+  getInitialAuthModalOpen,
+  readSessionStorageSafe,
+  recordNextRedirect,
+} from './utils/nextAutoRedirect'
 import { Turnstile } from './components/Turnstile'
 import { ProfilePage } from './components/ProfilePage'
 import { hasTurnstileSiteKey } from './utils/turnstile'
@@ -72,10 +80,13 @@ function App() {
   const captchaEnabled = hasTurnstileSiteKey()
 
   const headerRef = useRef<YunHeader | null>(null)
+  const hasAutoRedirectedRef = useRef(false)
+  const hasOpenedNextModalRef = useRef(false)
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null)
   const [authResolved, setAuthResolved] = useState(false)
+  const [blockedNextUrl, setBlockedNextUrl] = useState<string | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(
-    () => nextHintHost !== null || authParam === 'signin' || authParam === 'signup',
+    () => getInitialAuthModalOpen(currentSearch),
   )
   const [isSignUp, setIsSignUp] = useState(() => authParam === 'signup')
 
@@ -151,6 +162,57 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && !hasNextParam(window.location.search)) {
+      clearNextRedirectGuard(readSessionStorageSafe())
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const action = decideNextAction({
+      search: window.location.search,
+      authResolved,
+      signedIn: currentUser !== null,
+      currentOrigin: window.location.origin,
+      storage: readSessionStorageSafe(),
+      now: Date.now(),
+    })
+
+    if (action.kind === 'wait' || action.kind === 'none') {
+      setBlockedNextUrl(null)
+      return
+    }
+
+    if (action.kind === 'open-signin') {
+      setBlockedNextUrl(null)
+      if (!hasOpenedNextModalRef.current) {
+        hasOpenedNextModalRef.current = true
+        setShowAuthModal(true)
+      }
+      return
+    }
+
+    if (action.kind === 'blocked') {
+      setBlockedNextUrl(action.url)
+      return
+    }
+
+    if (hasAutoRedirectedRef.current) {
+      return
+    }
+    const storage = readSessionStorageSafe()
+    if (!recordNextRedirect(storage, action.url, Date.now())) {
+      setBlockedNextUrl(action.url)
+      return
+    }
+    hasAutoRedirectedRef.current = true
+    setBlockedNextUrl(null)
+    replaceLocation(action.url)
+  }, [authResolved, currentUser])
+
+  useEffect(() => {
     const headerEl = headerRef.current
     if (!headerEl) {
       return
@@ -218,7 +280,8 @@ function App() {
         if (error) throw error
         const nextTarget = resolveNextUrl(window.location.search)
         if (nextTarget !== null) {
-          window.location.assign(nextTarget)
+          clearNextRedirectGuard(readSessionStorageSafe())
+          assignLocation(nextTarget)
         } else {
           setAuthMessage({ type: 'success', text: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận (nếu có).' })
           void headerRef.current?.refresh()
@@ -232,7 +295,8 @@ function App() {
         if (error) throw error
         const nextTarget = resolveNextUrl(window.location.search)
         if (nextTarget !== null) {
-          window.location.assign(nextTarget)
+          clearNextRedirectGuard(readSessionStorageSafe())
+          assignLocation(nextTarget)
         } else {
           setCurrentUser(data.user)
           closeAuthModal()
@@ -324,6 +388,8 @@ function App() {
     { name: 'Git & GitHub', icon: '🐙' },
   ]
 
+  const blockedNextHost = blockedNextUrl ? new URL(blockedNextUrl).host : null
+
   return (
     <>
       <div className="portal-wrapper">
@@ -357,6 +423,18 @@ function App() {
         </yun-header>
 
         <main id="main" className="portal-main">
+          {blockedNextUrl && blockedNextHost && (
+            <div className="auth-next-loop-notice" role="status">
+              <span>{`Bạn đã đăng nhập. Mở lại ${blockedNextHost}?`}</span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => assignLocation(blockedNextUrl)}
+              >
+                {`Tiếp tục tới ${blockedNextHost}`}
+              </button>
+            </div>
+          )}
           {isProfileView && (
             <ProfilePage
               user={currentUser}
