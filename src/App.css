@@ -115,7 +115,7 @@ yun-header {
 }
 
 .profile-feedback-success {
-  color: var(--mint);
+  color: var(--mint-text);
 }
 
 .profile-feedback-error {
@@ -219,7 +219,8 @@ yun-header {
 
 .btn-launch-disabled {
   cursor: not-allowed;
-  opacity: 0.7;
+  color: var(--muted);
+  border-style: dashed;
   pointer-events: none;
 }
 
@@ -385,14 +386,24 @@ yun-header {
 }
 
 .app-card-disabled {
-  opacity: 0.55;
+  background: var(--bg-soft);
+  border-style: dashed;
+  box-shadow: none;
   cursor: not-allowed;
 }
 
 .app-card-disabled:hover {
   transform: none;
   border-color: var(--border);
-  box-shadow: var(--shadow);
+  box-shadow: none;
+}
+
+.app-card-disabled .app-name {
+  color: var(--muted);
+}
+
+.app-card-disabled .app-icon {
+  opacity: 0.6;
 }
 
 .app-card-top {
@@ -432,7 +443,7 @@ yun-header {
 
 .status-active {
   background: var(--mint-soft);
-  color: var(--mint);
+  color: var(--mint-text);
 }
 
 .status-beta {
@@ -442,7 +453,7 @@ yun-header {
 
 .status-dev {
   background: var(--peach-soft);
-  color: var(--peach);
+  color: var(--peach-text);
 }
 
 .app-meta {
@@ -626,7 +637,7 @@ yun-header {
   padding: 0 14px;
   font-size: 0.9375rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
   background: var(--surface-2);
   color: var(--text);
   transition:
@@ -635,7 +646,7 @@ yun-header {
 }
 
 .auth-input-group input::placeholder {
-  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  color: var(--muted);
 }
 
 .auth-input-group input:focus,
@@ -696,7 +707,7 @@ yun-header {
 .auth-alert-success {
   background: var(--mint-soft);
   border: 1px solid color-mix(in srgb, var(--mint) 35%, transparent);
-  color: var(--mint);
+  color: var(--mint-text);
 }
 
 .auth-next-hint {
