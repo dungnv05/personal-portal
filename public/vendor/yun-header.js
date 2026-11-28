@@ -148,16 +148,16 @@ function b() {
 }
 //#endregion
 //#region src/yun-header/yun-header.ts
-var x = "https://www.yundev.space", S = 3e3, C = !1, w = /^#[A-Za-z][\w-]*$/, T = "\n:host {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 40;\n  font-family: var(--yh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);\n  color: var(--yh-ink, #F2EFF7);\n}\n\n*, *::before, *::after {\n  box-sizing: border-box;\n}\n\n.yh-bar {\n  position: relative;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n  min-height: 64px;\n  padding: 0 24px;\n  background: var(--yh-bg, #15121D);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  backdrop-filter: blur(12px);\n  -webkit-backdrop-filter: blur(12px);\n}\n\n:host([variant=\"overlay\"]) .yh-bar {\n  min-height: 48px;\n  background: color-mix(in srgb, var(--yh-bg, #15121D) 72%, transparent);\n  border-bottom-color: transparent;\n}\n\n.yh-skip-link {\n  position: absolute;\n  left: -9999px;\n  top: 8px;\n  z-index: 60;\n  padding: 10px 16px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.875rem;\n  font-weight: 600;\n  text-decoration: none;\n}\n\n.yh-skip-link:focus,\n.yh-skip-link:focus-visible {\n  left: 16px;\n}\n\n.yh-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-nav {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-right {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  flex-shrink: 0;\n}\n\n.yh-theme-toggle {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n  width: 42px;\n  height: 42px;\n  padding: 0;\n  border-radius: var(--yh-toggle-radius, 12px);\n  border: 1px solid var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1)));\n  background: transparent;\n  color: var(--yh-muted, #B8B3C7);\n  cursor: pointer;\n  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;\n}\n\n.yh-theme-toggle[hidden] {\n  display: none;\n}\n\n.yh-theme-toggle:hover {\n  background: var(--yh-toggle-hover-bg, color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent));\n  color: var(--yh-ink, #F2EFF7);\n}\n\n.yh-account-desktop {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  position: relative;\n}\n\n.yh-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 0 14px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid transparent;\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  line-height: 1;\n  cursor: pointer;\n  text-decoration: none;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;\n}\n\n.yh-btn:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-btn-text:hover:not(:disabled) {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-btn-primary {\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n}\n\n.yh-btn-primary:hover:not(:disabled) {\n  filter: brightness(1.06);\n}\n\n.yh-btn-icon {\n  padding: 0;\n  width: 44px;\n  height: 44px;\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-btn-icon:hover:not(:disabled) {\n  color: var(--yh-ink, #F2EFF7);\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-account-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 4px 10px 4px 6px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color 150ms ease, border-color 150ms ease;\n}\n\n.yh-account-btn:hover {\n  background: color-mix(in srgb, var(--yh-surface, #1D1927) 86%, var(--yh-ink, #F2EFF7));\n}\n\n.yh-avatar {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.8125rem;\n  font-weight: 700;\n}\n\n.yh-avatar img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n\n.yh-account-name {\n  max-width: 16ch;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-chevron {\n  width: 16px;\n  height: 16px;\n  flex-shrink: 0;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-menu {\n  position: absolute;\n  top: calc(100% + 8px);\n  right: 0;\n  min-width: 240px;\n  padding: 8px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-surface, #1D1927);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);\n  z-index: 50;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu[hidden] {\n  display: none;\n}\n\n.yh-menu-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 8px 10px 10px;\n}\n\n.yh-menu-identity {\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu-name {\n  font-size: 0.875rem;\n  font-weight: 600;\n  color: var(--yh-ink, #F2EFF7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-email {\n  font-size: 0.75rem;\n  color: var(--yh-muted, #B8B3C7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-divider {\n  height: 1px;\n  margin: 4px 0;\n  background: var(--yh-border, rgba(255, 255, 255, 0.1));\n  border: 0;\n}\n\n.yh-menu-item {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  min-height: 44px;\n  padding: 0 12px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n  border: 0;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 500;\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.yh-menu-item:hover:not(:disabled),\n.yh-menu-item:focus-visible {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-menu-item:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-skeleton {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 44px;\n  padding: 0 6px;\n}\n\n.yh-skeleton-circle {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-skeleton-bar {\n  width: 72px;\n  height: 14px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-error-inline {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.yh-muted-text {\n  font-size: 0.8125rem;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-expired-notice,\n.yh-logout-notice {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-wrap: wrap;\n  gap: 12px;\n  padding: 8px 24px;\n  background: var(--yh-surface, #1D1927);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  font-size: 0.875rem;\n  color: var(--yh-ink, #F2EFF7);\n}\n\n.yh-mobile-toggle {\n  display: none;\n}\n\n.yh-sheet-backdrop {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.52);\n  z-index: 60;\n  display: flex;\n  justify-content: flex-end;\n}\n\n.yh-sheet-backdrop[hidden] {\n  display: none;\n}\n\n.yh-expired-notice[hidden], .yh-logout-notice[hidden] { display: none; }\n\n.yh-sheet {\n  width: 85vw;\n  max-width: 360px;\n  height: 100%;\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  border-left: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  padding: 16px;\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n  overflow-y: auto;\n}\n\n.yh-sheet-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n.yh-sheet-title {\n  font-size: 1rem;\n  font-weight: 700;\n}\n\n.yh-sheet-nav {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.yh-sheet-nav:empty {\n  display: none;\n}\n\n.yh-sheet-account {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-top: 12px;\n  border-top: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n}\n\n.yh-sheet-account-actions {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.yh-sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n:focus-visible {\n  outline: 2px solid var(--yh-focus, #A78BFA);\n  outline-offset: 2px;\n}\n\n@media (min-width: 641px) and (max-width: 1023px) {\n  .yh-account-name {\n    display: none;\n  }\n}\n\n@media (max-width: 640px) {\n  .yh-bar {\n    min-height: 56px;\n    padding: 0 16px;\n  }\n\n  .yh-nav,\n  .yh-account-desktop {\n    display: none;\n  }\n\n  .yh-mobile-toggle {\n    display: inline-flex;\n  }\n\n  .yh-expired-notice,\n  .yh-logout-notice {\n    padding: 8px 16px;\n  }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    transition: none !important;\n    animation: none !important;\n  }\n}\n";
-function E(e) {
+var x = 1, S = "https://www.yundev.space", C = "Điều hướng chính", w = 60, T = 3e3, E = !1, D = /^#[A-Za-z][\w-]*$/, O = "\n:host {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 40;\n  font-family: var(--yh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);\n  color: var(--yh-ink, #F2EFF7);\n}\n\n*, *::before, *::after {\n  box-sizing: border-box;\n}\n\n.yh-bar {\n  position: relative;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n  min-height: 64px;\n  padding: 0 24px;\n  background: var(--yh-bg, #15121D);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  backdrop-filter: blur(12px);\n  -webkit-backdrop-filter: blur(12px);\n}\n\n:host([variant=\"overlay\"]) .yh-bar {\n  min-height: 48px;\n  background: color-mix(in srgb, var(--yh-bg, #15121D) 72%, transparent);\n  border-bottom-color: transparent;\n}\n\n.yh-skip-link {\n  position: absolute;\n  left: -9999px;\n  top: 8px;\n  z-index: 60;\n  padding: 10px 16px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.875rem;\n  font-weight: 600;\n  text-decoration: none;\n}\n\n.yh-skip-link:focus,\n.yh-skip-link:focus-visible {\n  left: 16px;\n}\n\n.yh-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-left--app {\n  flex-shrink: 0;\n}\n\n.yh-nav {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n\n.yh-right {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  flex-shrink: 0;\n}\n\n.yh-theme-toggle {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n  width: 42px;\n  height: 42px;\n  padding: 0;\n  border-radius: var(--yh-toggle-radius, 12px);\n  border: 1px solid var(--yh-control-border, var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1))));\n  background: transparent;\n  color: var(--yh-muted, #B8B3C7);\n  cursor: pointer;\n  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;\n}\n\n.yh-theme-toggle[hidden] {\n  display: none;\n}\n\n.yh-theme-toggle:hover {\n  background: var(--yh-toggle-hover-bg, color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent));\n  color: var(--yh-ink, #F2EFF7);\n}\n\n.yh-account-desktop {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  position: relative;\n}\n\n.yh-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 0 14px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid transparent;\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  line-height: 1;\n  cursor: pointer;\n  text-decoration: none;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;\n}\n\n.yh-btn:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-btn-text:hover:not(:disabled) {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-btn-primary {\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n}\n\n.yh-btn-primary:hover:not(:disabled) {\n  filter: brightness(1.06);\n}\n\n.yh-btn-icon {\n  padding: 0;\n  width: 44px;\n  height: 44px;\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-btn-icon:hover:not(:disabled) {\n  color: var(--yh-ink, #F2EFF7);\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-account-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 44px;\n  min-height: 44px;\n  padding: 4px 10px 4px 6px;\n  border-radius: var(--yh-radius, 12px);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color 150ms ease, border-color 150ms ease;\n}\n\n.yh-account-btn:hover {\n  background: color-mix(in srgb, var(--yh-surface, #1D1927) 86%, var(--yh-ink, #F2EFF7));\n}\n\n.yh-avatar {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n  background: var(--yh-primary, #A78BFA);\n  color: var(--yh-on-primary, #1B1526);\n  font-size: 0.8125rem;\n  font-weight: 700;\n}\n\n.yh-avatar img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n\n.yh-account-name {\n  max-width: 16ch;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-chevron {\n  width: 16px;\n  height: 16px;\n  flex-shrink: 0;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-menu {\n  position: absolute;\n  top: calc(100% + 8px);\n  right: 0;\n  min-width: 240px;\n  padding: 8px;\n  border-radius: var(--yh-radius, 12px);\n  background: var(--yh-surface, #1D1927);\n  border: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);\n  z-index: 50;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu[hidden] {\n  display: none;\n}\n\n.yh-menu-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 8px 10px 10px;\n}\n\n.yh-menu-identity {\n  min-width: 0;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n}\n\n.yh-menu-name {\n  font-size: 0.875rem;\n  font-weight: 600;\n  color: var(--yh-ink, #F2EFF7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-email {\n  font-size: 0.75rem;\n  color: var(--yh-muted, #B8B3C7);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.yh-menu-divider {\n  height: 1px;\n  margin: 4px 0;\n  background: var(--yh-border, rgba(255, 255, 255, 0.1));\n  border: 0;\n}\n\n.yh-menu-item {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  min-height: 44px;\n  padding: 0 12px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n  border: 0;\n  background: transparent;\n  color: var(--yh-ink, #F2EFF7);\n  font-family: inherit;\n  font-size: 0.875rem;\n  font-weight: 500;\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.yh-menu-item:hover:not(:disabled),\n.yh-menu-item:focus-visible {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-menu-item:disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n.yh-skeleton {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 44px;\n  padding: 0 6px;\n}\n\n.yh-skeleton-circle {\n  width: 32px;\n  height: 32px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-skeleton-bar {\n  width: 72px;\n  height: 14px;\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--yh-muted, #B8B3C7) 25%, transparent);\n}\n\n.yh-error-inline {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.yh-muted-text {\n  font-size: 0.8125rem;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-expired-notice,\n.yh-logout-notice {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-wrap: wrap;\n  gap: 12px;\n  padding: 8px 24px;\n  background: var(--yh-surface, #1D1927);\n  border-bottom: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  font-size: 0.875rem;\n  color: var(--yh-ink, #F2EFF7);\n}\n\n.yh-mobile-toggle {\n  border-color: var(--yh-control-border, var(--yh-muted, #B8B3C7));\n  display: none;\n}\n\n.yh-sheet-backdrop {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.52);\n  z-index: 60;\n  display: flex;\n  justify-content: flex-end;\n}\n\n.yh-sheet-backdrop[hidden] {\n  display: none;\n}\n\n.yh-expired-notice[hidden], .yh-logout-notice[hidden] { display: none; }\n\n.yh-sheet {\n  width: 85vw;\n  max-width: 360px;\n  height: 100%;\n  background: var(--yh-surface, #1D1927);\n  color: var(--yh-ink, #F2EFF7);\n  border-left: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n  padding: 16px;\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n  overflow-y: auto;\n}\n\n.yh-sheet-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n.yh-sheet-title {\n  font-size: 1rem;\n  font-weight: 700;\n}\n\n.yh-sheet-nav {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.yh-sheet-nav:empty {\n  display: none;\n}\n\n.yh-sheet-account {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-top: 12px;\n  border-top: 1px solid var(--yh-border, rgba(255, 255, 255, 0.1));\n}\n\n.yh-sheet-account-actions {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.yh-sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n:focus-visible {\n  outline: 2px solid var(--yh-focus, #A78BFA);\n  outline-offset: 2px;\n}\n\nslot[name=\"app-title\"]::slotted(*) {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  flex-shrink: 0;\n  min-height: 44px;\n  min-width: 0;\n  color: var(--yh-ink, #F2EFF7);\n  font-weight: 700;\n  text-decoration: none;\n  white-space: nowrap;\n}\n\nslot[name=\"app-title\"]::slotted(:focus-visible) {\n  outline: 2px solid var(--yh-focus, #A78BFA);\n  outline-offset: 2px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n}\n\nslot[name=\"app-nav\"]::slotted(a) {\n  display: inline-flex;\n  align-items: center;\n  flex: 0 0 auto;\n  min-height: 40px;\n  padding: 0 10px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n  color: var(--yh-muted, #B8B3C7);\n  font-size: 0.875rem;\n  font-weight: 500;\n  text-decoration: none;\n  white-space: nowrap;\n  transition: background-color 150ms ease, color 150ms ease;\n}\n\nslot[name=\"app-nav\"]::slotted(a:hover) {\n  color: var(--yh-ink, #F2EFF7);\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\nslot[name=\"app-nav\"]::slotted(a[aria-current=\"page\"]) {\n  color: var(--yh-ink, #F2EFF7);\n  font-weight: 700;\n  box-shadow: inset 0 -2px 0 var(--yh-primary, #A78BFA);\n}\n\nslot[name=\"app-nav\"]::slotted(a:focus-visible) {\n  outline: 2px solid var(--yh-focus, #A78BFA);\n  outline-offset: 2px;\n}\n\nslot[name=\"app-actions\"]::slotted(*) {\n  display: inline-flex;\n  align-items: center;\n}\n\n.yh-nav--app {\n  flex: 1 1 auto;\n  justify-content: safe center;\n  overflow-x: auto;\n  overflow-y: hidden;\n  scrollbar-width: none;\n  padding-block: 4px;\n}\n\n.yh-nav--app::-webkit-scrollbar {\n  display: none;\n}\n\n.yh-shared-link {\n  border-color: var(--yh-control-border, var(--yh-muted, #B8B3C7));\n}\n\n.yh-shared-link[hidden] {\n  display: none;\n}\n\n.yh-sheet-section {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.yh-sheet-heading {\n  margin: 0 0 4px;\n  font-size: 0.75rem;\n  font-weight: 700;\n  letter-spacing: 0.06em;\n  text-transform: uppercase;\n  color: var(--yh-muted, #B8B3C7);\n}\n\n.yh-sheet-nav a,\n.yh-sheet-section a {\n  display: flex;\n  align-items: center;\n  min-height: 44px;\n  padding: 0 12px;\n  border-radius: calc(var(--yh-radius, 12px) - 4px);\n  color: var(--yh-ink, #F2EFF7);\n  text-decoration: none;\n  font-size: 0.9375rem;\n  font-weight: 500;\n}\n\n.yh-sheet-nav a:hover,\n.yh-sheet-nav a:focus-visible,\n.yh-sheet-section a:hover,\n.yh-sheet-section a:focus-visible {\n  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);\n}\n\n.yh-sheet-nav a[aria-current=\"page\"],\n.yh-sheet-section a[aria-current=\"page\"] {\n  font-weight: 700;\n  background: color-mix(in srgb, var(--yh-primary, #A78BFA) 14%, transparent);\n  box-shadow: inset 3px 0 0 var(--yh-primary, #A78BFA);\n}\n\n@media (min-width: 641px) and (max-width: 1023px) {\n  .yh-account-name {\n    display: none;\n  }\n}\n\n@media (max-width: 640px) {\n  .yh-bar {\n    min-height: 56px;\n    padding: 0 16px;\n  }\n\n  .yh-nav,\n  .yh-account-desktop {\n    display: none;\n  }\n\n  .yh-mobile-toggle {\n    display: inline-flex;\n  }\n\n  .yh-shared-link {\n    display: none;\n  }\n\n  .yh-expired-notice,\n  .yh-logout-notice {\n    padding: 8px 16px;\n  }\n}\n\n@media (max-width: 1023px) {\n  :host([collapse=\"lg\"]) .yh-nav,\n  :host([collapse=\"auto\"]) .yh-nav {\n    display: none;\n  }\n\n  :host([collapse=\"lg\"]) .yh-mobile-toggle,\n  :host([collapse=\"auto\"]) .yh-mobile-toggle {\n    display: inline-flex;\n  }\n\n  :host([collapse=\"lg\"]) .yh-shared-link,\n  :host([collapse=\"auto\"]) .yh-shared-link {\n    display: none;\n  }\n}\n\n@media (min-width: 641px) and (max-width: 1023px) {\n  :host([collapse=\"lg\"]) .yh-sheet-account,\n  :host([collapse=\"auto\"]) .yh-sheet-account {\n    display: none;\n  }\n}\n\n@media (max-width: 1279px) {\n  :host([collapse=\"xl\"]) .yh-nav {\n    display: none;\n  }\n\n  :host([collapse=\"xl\"]) .yh-mobile-toggle {\n    display: inline-flex;\n  }\n\n  :host([collapse=\"xl\"]) .yh-shared-link {\n    display: none;\n  }\n}\n\n@media (min-width: 641px) and (max-width: 1279px) {\n  :host([collapse=\"xl\"]) .yh-sheet-account {\n    display: none;\n  }\n}\n\n.yh-bar.yh-collapsed .yh-nav {\n  display: none;\n}\n\n.yh-bar.yh-collapsed .yh-mobile-toggle {\n  display: inline-flex;\n}\n\n.yh-bar.yh-collapsed .yh-shared-link {\n  display: none;\n}\n\n@media (min-width: 641px) {\n  .yh-sheet-backdrop.yh-collapsed .yh-sheet-account {\n    display: none;\n  }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    transition: none !important;\n    animation: none !important;\n  }\n}\n";
+function k(e) {
 	return typeof e == "object" && !!e;
 }
-function D(e) {
+function A(e) {
 	if (typeof e != "string") return null;
 	let t = e.trim();
 	return t.length > 0 ? t : null;
 }
-function O(e) {
+function j(e) {
 	if (!e) return null;
 	try {
 		let t = new URL(e);
@@ -166,7 +166,7 @@ function O(e) {
 		return null;
 	}
 }
-function k(e) {
+function M(e) {
 	if (/\s/.test(e)) return !0;
 	for (let t = 0; t < e.length; t += 1) {
 		let n = e.charCodeAt(t);
@@ -174,7 +174,7 @@ function k(e) {
 	}
 	return !1;
 }
-function A(e) {
+function N(e) {
 	let t = e.indexOf("://");
 	if (t < 0) return null;
 	let n = e.slice(t + 3), r = n.search(/[/?#]/), i = r >= 0 ? n.slice(0, r) : n;
@@ -182,10 +182,10 @@ function A(e) {
 	let a = i.indexOf(":");
 	return (a >= 0 ? i.slice(0, a) : i).toLowerCase();
 }
-function j(e, n = { allowLocalhost: C }) {
+function P(e, n = { allowLocalhost: E }) {
 	let r;
 	if (typeof e == "string") {
-		if (!e || k(e)) return !1;
+		if (!e || M(e)) return !1;
 		try {
 			r = new URL(e);
 		} catch {
@@ -198,34 +198,34 @@ function j(e, n = { allowLocalhost: C }) {
 	if (r.protocol === "http:") {
 		if (!n.allowLocalhost || i !== "localhost" && i !== "127.0.0.1") return !1;
 		if (typeof e == "string") {
-			let t = A(e);
+			let t = N(e);
 			return t === "localhost" || t === "127.0.0.1";
 		}
 		return !0;
 	}
 	return !1;
 }
-function M(e) {
-	if (!e || k(e)) return x;
+function F(e) {
+	if (!e || M(e)) return S;
 	try {
 		let t = new URL(e);
-		return j(e, { allowLocalhost: C }) ? t.origin : x;
+		return P(e, { allowLocalhost: E }) ? t.origin : S;
 	} catch {
-		return x;
+		return S;
 	}
 }
-function N(e, t) {
+function I(e, t) {
 	let n = `${t}/?view=profile`;
-	if (!e || k(e)) return n;
+	if (!e || M(e)) return n;
 	if (e.startsWith("/") && !e.startsWith("//")) return e;
 	try {
 		let t = new URL(e);
-		return j(e, { allowLocalhost: C }) ? t.href : n;
+		return P(e, { allowLocalhost: E }) ? t.href : n;
 	} catch {
 		return n;
 	}
 }
-function P(e) {
+function L(e) {
 	try {
 		let t = new URL(e);
 		return t.hash = "", t.searchParams.delete("auth"), t.toString();
@@ -233,27 +233,27 @@ function P(e) {
 		return e;
 	}
 }
-function F(e) {
+function R(e) {
 	let t = e.trim().split(/\s+/).filter(Boolean).slice(0, 2);
 	return t.length === 0 ? "U" : t.map((e) => Array.from(e)[0] ?? "").join("").toUpperCase();
 }
-function I(e) {
-	if (!E(e) || e.ok === !1) return null;
+function z(e) {
+	if (!k(e) || e.ok === !1) return null;
 	let t = e.user;
-	if (!E(t)) return null;
-	let n = D(t.id);
+	if (!k(t)) return null;
+	let n = A(t.id);
 	if (!n) return null;
-	let r = D(t.email), i = E(t.user_metadata) ? t.user_metadata : null, a = D(t.display_name) ?? (i ? D(i.full_name) : null), o = r && r.split("@")[0]?.trim() || null, s = a ?? o ?? "User";
+	let r = A(t.email), i = k(t.user_metadata) ? t.user_metadata : null, a = A(t.display_name) ?? (i ? A(i.full_name) : null), o = r && r.split("@")[0]?.trim() || null, s = a ?? o ?? "User";
 	return {
 		id: n,
 		email: r,
 		displayName: s,
 		rawDisplayName: a,
-		avatarUrl: O(D(t.avatar_url) ?? (i ? D(i.avatar_url) : null)),
-		initials: F(s)
+		avatarUrl: j(A(t.avatar_url) ?? (i ? A(i.avatar_url) : null)),
+		initials: R(s)
 	};
 }
-function L() {
+function B() {
 	if (typeof document > "u" || !document.cookie) return "";
 	let e = "";
 	for (let t of document.cookie.split(";")) {
@@ -268,19 +268,44 @@ function L() {
 	}
 	return e;
 }
-function R(e) {
+function V(e) {
 	let t = document.createElementNS("http://www.w3.org/2000/svg", "svg");
 	return t.setAttribute("viewBox", "0 0 24 24"), t.setAttribute("width", "18"), t.setAttribute("height", "18"), t.setAttribute("fill", "none"), t.setAttribute("stroke", "currentColor"), t.setAttribute("stroke-width", "2"), t.setAttribute("stroke-linecap", "round"), t.setAttribute("stroke-linejoin", "round"), t.setAttribute("aria-hidden", "true"), e && t.setAttribute("class", e), t;
 }
-function z(e, t) {
-	let n = R(t), r = document.createElementNS("http://www.w3.org/2000/svg", "path");
+function H(e, t) {
+	let n = V(t), r = document.createElementNS("http://www.w3.org/2000/svg", "path");
 	return r.setAttribute("d", e), n.appendChild(r), n;
 }
-function B() {
-	return z("M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z");
+function U(e) {
+	if (!e) return C;
+	let t = "";
+	for (let n = 0; n < e.length; n += 1) {
+		let r = e.charCodeAt(n);
+		r > 31 && r !== 127 && (t += e[n]);
+	}
+	let n = t.trim();
+	if (!n) return C;
+	let r = Array.from(n);
+	return r.length <= w ? n : r.slice(0, w).join("").trim() || C;
 }
-function V() {
-	let e = "http://www.w3.org/2000/svg", t = R(), n = document.createElementNS(e, "circle");
+function W() {
+	let e = V();
+	for (let [t, n] of [
+		["3", "3"],
+		["14", "3"],
+		["3", "14"],
+		["14", "14"]
+	]) {
+		let r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+		r.setAttribute("x", t), r.setAttribute("y", n), r.setAttribute("width", "7"), r.setAttribute("height", "7"), r.setAttribute("rx", "1"), e.appendChild(r);
+	}
+	return e;
+}
+function G() {
+	return H("M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z");
+}
+function K() {
+	let e = "http://www.w3.org/2000/svg", t = V(), n = document.createElementNS(e, "circle");
 	n.setAttribute("cx", "12"), n.setAttribute("cy", "12"), n.setAttribute("r", "4"), t.appendChild(n);
 	for (let n of [
 		"M12 2v2",
@@ -297,7 +322,7 @@ function V() {
 	}
 	return t;
 }
-function H(e) {
+function q(e) {
 	let t = document.createElement("span");
 	if (t.className = "yh-avatar", t.setAttribute("aria-hidden", "true"), e.avatarUrl) {
 		let n = document.createElement("img");
@@ -307,7 +332,8 @@ function H(e) {
 	} else t.textContent = e.initials;
 	return t;
 }
-var U = class extends HTMLElement {
+var J = class extends HTMLElement {
+	static SLOT_API = 1;
 	static get observedAttributes() {
 		return [
 			"app",
@@ -316,7 +342,10 @@ var U = class extends HTMLElement {
 			"profile-url",
 			"hide-account",
 			"skip-target",
-			"no-theme-toggle"
+			"no-theme-toggle",
+			"nav-label",
+			"collapse",
+			"shared-nav"
 		];
 	}
 	_state = "loading";
@@ -341,12 +370,21 @@ var U = class extends HTMLElement {
 	_sheetBackdrop;
 	_sheetDialog;
 	_sheetCloseBtn;
+	_nav;
+	_bar;
+	_left;
+	_appTitleSlot;
+	_appNavSlot;
+	_sharedLink;
 	_sheetNav;
+	_sheetSection = null;
 	_sheetAccount;
 	_navSlot;
 	_liveRegion;
 	_accountButtonEl = null;
 	_menuEl = null;
+	_resizeObserver = null;
+	_autoCollapseWidth = 0;
 	_onWindowFocus = () => {
 		this.refresh();
 	};
@@ -362,6 +400,13 @@ var U = class extends HTMLElement {
 			return;
 		}
 		this._menuOpen && e.key === "Escape" && (e.preventDefault(), this._setMenuOpen(!1, !0));
+	};
+	_onWindowResize = () => {
+		if (typeof ResizeObserver > "u" && this.getAttribute("collapse") === "auto") {
+			this._updateAutoCollapse();
+			return;
+		}
+		this._closeSheetIfToggleHidden();
 	};
 	_onThemeChange = () => {
 		this._renderThemeButton();
@@ -386,26 +431,34 @@ var U = class extends HTMLElement {
 		v(e);
 	}
 	get authBase() {
-		return M(this.getAttribute("auth-base"));
+		return F(this.getAttribute("auth-base"));
 	}
 	get profileUrl() {
-		return N(this.getAttribute("profile-url"), this.authBase);
+		return I(this.getAttribute("profile-url"), this.authBase);
 	}
 	get hideAccount() {
 		return this.hasAttribute("hide-account");
 	}
+	get navLabel() {
+		return U(this.getAttribute("nav-label"));
+	}
+	get sharedNav() {
+		return this.hasAttribute("shared-nav");
+	}
 	get skipTarget() {
 		let e = this.getAttribute("skip-target")?.trim();
-		return e && w.test(e) ? e : "#main";
+		return e && D.test(e) ? e : "#main";
 	}
 	connectedCallback() {
-		this._ensureDom(), this._syncAttributes(), this._renderThemeButton(), window.addEventListener("focus", this._onWindowFocus), document.addEventListener("visibilitychange", this._onVisibilityChange), document.addEventListener("click", this._onDocumentClick), document.addEventListener("keydown", this._onDocumentKeyDown), document.addEventListener(c, this._onThemeChange), this.refresh();
+		this._ensureDom(), this._syncAttributes(), this._renderThemeButton(), this._syncAppTitleClass(), this._syncAppNavClass(), this._setupResizeObserver(), this._updateAutoCollapse(), typeof document < "u" && document.fonts?.ready && document.fonts.ready.then(() => {
+			this.isConnected && (this._autoCollapseWidth = 0, this._updateAutoCollapse());
+		}), window.addEventListener("focus", this._onWindowFocus), window.addEventListener("resize", this._onWindowResize), document.addEventListener("visibilitychange", this._onVisibilityChange), document.addEventListener("click", this._onDocumentClick), document.addEventListener("keydown", this._onDocumentKeyDown), document.addEventListener(c, this._onThemeChange), this.refresh();
 	}
 	disconnectedCallback() {
-		window.removeEventListener("focus", this._onWindowFocus), document.removeEventListener("visibilitychange", this._onVisibilityChange), document.removeEventListener("click", this._onDocumentClick), document.removeEventListener("keydown", this._onDocumentKeyDown), document.removeEventListener(c, this._onThemeChange), this._abortPending();
+		this._resizeObserver?.disconnect(), this._resizeObserver = null, window.removeEventListener("focus", this._onWindowFocus), window.removeEventListener("resize", this._onWindowResize), document.removeEventListener("visibilitychange", this._onVisibilityChange), document.removeEventListener("click", this._onDocumentClick), document.removeEventListener("keydown", this._onDocumentKeyDown), document.removeEventListener(c, this._onThemeChange), this._abortPending();
 	}
 	attributeChangedCallback(e, t, n) {
-		t === n || !this._rendered || (this._syncAttributes(), e === "auth-base" ? this.refresh() : (e === "hide-account" || e === "profile-url") && this._renderAccountRegions());
+		t === n || !this._rendered || (this._syncAttributes(), e === "auth-base" ? this.refresh() : e === "nav-label" ? (this._sheetOpen && this._syncMobileNavClone(), this._autoCollapseWidth = 0, this._updateAutoCollapse()) : e === "shared-nav" ? (this._sheetOpen && this._syncMobileNavClone(), this._renderAccountRegions()) : e === "collapse" ? (this._autoCollapseWidth = 0, this._updateAutoCollapse()) : (e === "hide-account" || e === "profile-url") && this._renderAccountRegions());
 	}
 	async refresh() {
 		this._abortPending();
@@ -415,7 +468,7 @@ var U = class extends HTMLElement {
 		this._state !== "signed-in" && (this._state = "loading", this._renderAccountRegions());
 		let n = !1, r = setTimeout(() => {
 			n = !0, e.abort("timeout");
-		}, S);
+		}, T);
 		this._loadingTimer = r;
 		try {
 			let r = await fetch(`${this.authBase}/api/auth/me`, {
@@ -427,7 +480,7 @@ var U = class extends HTMLElement {
 				if (n) throw Error("Request timed out");
 				return;
 			}
-			if (r.status === 401 && L()) {
+			if (r.status === 401 && B()) {
 				let t = await this._raceWithAbort(this._tryRefreshSession(), e.signal);
 				if (e.signal.aborted) {
 					if (n) throw Error("Request timed out");
@@ -449,7 +502,7 @@ var U = class extends HTMLElement {
 				} catch {
 					e = null;
 				}
-				let n = I(e);
+				let n = z(e);
 				if (n) {
 					let e = this._lastStableState !== "signed-in" || this._user?.id !== n.id;
 					this._stale = !1, this._state = "signed-in", this._lastStableState = "signed-in", this._user = n, e && this._announce(`Đã đăng nhập với tên ${n.displayName}`);
@@ -477,7 +530,7 @@ var U = class extends HTMLElement {
 		});
 	}
 	async _tryRefreshSession() {
-		return await a(`${this.authBase}/api/auth/refresh`, L) !== "failed";
+		return await a(`${this.authBase}/api/auth/refresh`, B) !== "failed";
 	}
 	_applySignedOutOrExpired(e) {
 		this._stale = !1, this._logoutError = !1, this._user = null, this._menuOpen = !1, e ? (this._state = "expired", this._lastStableState = "expired") : (this._state = "signed-out", this._lastStableState = "signed-out");
@@ -489,55 +542,124 @@ var U = class extends HTMLElement {
 		if (this._rendered) return;
 		this._rendered = !0;
 		let e = document.createElement("style");
-		e.textContent = T;
+		e.textContent = O;
 		let t = document.createElement("header");
-		t.setAttribute("part", "bar"), t.className = "yh-bar", this._skipLink = document.createElement("a"), this._skipLink.className = "yh-skip-link", this._skipLink.textContent = "Bỏ qua đến nội dung";
+		this._bar = t, t.setAttribute("part", "bar"), t.className = "yh-bar", this._skipLink = document.createElement("a"), this._skipLink.className = "yh-skip-link", this._skipLink.textContent = "Bỏ qua đến nội dung";
 		let n = document.createElement("div");
-		n.className = "yh-left";
+		this._left = n, n.className = "yh-left";
 		let r = document.createElement("slot");
-		r.name = "brand", n.appendChild(r);
-		let i = document.createElement("nav");
-		i.className = "yh-nav", i.setAttribute("aria-label", "Điều hướng chính"), this._navSlot = document.createElement("slot"), this._navSlot.name = "nav", this._navSlot.addEventListener("slotchange", () => {
-			this._sheetOpen && this._syncMobileNavClone();
-		}), i.appendChild(this._navSlot);
-		let a = document.createElement("div");
-		a.className = "yh-right";
-		let o = document.createElement("slot");
-		o.name = "actions", this._themeBtn = document.createElement("button"), this._themeBtn.type = "button", this._themeBtn.className = "yh-theme-toggle", this._themeBtn.title = "Chuyển chế độ sáng/tối", this._themeBtn.setAttribute("aria-label", "Chuyển chế độ sáng/tối"), this._themeBtn.addEventListener("click", () => {
+		r.name = "brand", r.addEventListener("slotchange", () => {
+			this._autoCollapseWidth = 0, this._updateAutoCollapse();
+		});
+		let i = document.createElement("slot");
+		this._appTitleSlot = i, i.name = "app-title", i.addEventListener("slotchange", () => {
+			this._syncAppTitleClass(), this._autoCollapseWidth = 0, this._updateAutoCollapse();
+		}), n.append(r, i), this._nav = document.createElement("nav");
+		let a = this._nav;
+		a.className = "yh-nav", a.setAttribute("aria-label", "Điều hướng chính"), this._navSlot = document.createElement("slot"), this._navSlot.name = "nav", this._navSlot.addEventListener("slotchange", () => {
+			this._sheetOpen && this._syncMobileNavClone(), this._autoCollapseWidth = 0, this._updateAutoCollapse();
+		}), this._appNavSlot = document.createElement("slot"), this._appNavSlot.name = "app-nav", this._appNavSlot.addEventListener("slotchange", () => {
+			this._syncAppNavClass(), this._sheetOpen && this._syncMobileNavClone(), this._autoCollapseWidth = 0, this._updateAutoCollapse();
+		}), a.append(this._navSlot, this._appNavSlot);
+		let o = document.createElement("div");
+		o.className = "yh-right";
+		let s = document.createElement("slot");
+		s.name = "actions", s.addEventListener("slotchange", () => {
+			this._autoCollapseWidth = 0, this._updateAutoCollapse();
+		}), this._themeBtn = document.createElement("button"), this._themeBtn.type = "button", this._themeBtn.className = "yh-theme-toggle", this._themeBtn.title = "Chuyển chế độ sáng/tối", this._themeBtn.setAttribute("aria-label", "Chuyển chế độ sáng/tối"), this._themeBtn.addEventListener("click", () => {
 			this.setTheme(this.theme === "dark" ? "light" : "dark");
-		}), this._accountDesktop = document.createElement("div"), this._accountDesktop.className = "yh-account-desktop", this._mobileToggleBtn = document.createElement("button"), this._mobileToggleBtn.type = "button", this._mobileToggleBtn.className = "yh-btn yh-btn-icon yh-mobile-toggle", this._mobileToggleBtn.setAttribute("aria-label", "Mở menu"), this._mobileToggleBtn.setAttribute("aria-expanded", "false"), this._mobileToggleBtn.appendChild(z("M4 6h16M4 12h16M4 18h16")), this._mobileToggleBtn.addEventListener("click", () => {
+		}), this._accountDesktop = document.createElement("div"), this._accountDesktop.className = "yh-account-desktop", this._mobileToggleBtn = document.createElement("button"), this._mobileToggleBtn.type = "button", this._mobileToggleBtn.className = "yh-btn yh-btn-icon yh-mobile-toggle", this._mobileToggleBtn.setAttribute("aria-label", "Mở menu"), this._mobileToggleBtn.setAttribute("aria-expanded", "false"), this._mobileToggleBtn.setAttribute("aria-haspopup", "dialog"), this._mobileToggleBtn.setAttribute("aria-controls", "yh-sheet"), this._mobileToggleBtn.appendChild(H("M4 6h16M4 12h16M4 18h16")), this._mobileToggleBtn.addEventListener("click", () => {
 			this._setSheetOpen(!this._sheetOpen, !1);
-		}), a.append(o, this._themeBtn, this._accountDesktop, this._mobileToggleBtn), t.append(this._skipLink, n, i, a), this._expiredNotice = document.createElement("div"), this._expiredNotice.className = "yh-expired-notice", this._expiredNotice.setAttribute("role", "status"), this._expiredNotice.hidden = !0;
-		let s = document.createElement("span");
-		s.textContent = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
-		let c = document.createElement("button");
-		c.type = "button", c.className = "yh-btn yh-btn-primary", c.textContent = "Đăng nhập lại", c.addEventListener("click", () => {
-			this._handleAuthClick("signin");
-		}), this._expiredNotice.append(s, c), this._logoutNotice = document.createElement("div"), this._logoutNotice.className = "yh-logout-notice", this._logoutNotice.setAttribute("role", "alert"), this._logoutNotice.hidden = !0;
+		});
+		let c = document.createElement("slot");
+		c.name = "app-actions", c.addEventListener("slotchange", () => {
+			this._autoCollapseWidth = 0, this._updateAutoCollapse();
+		}), this._sharedLink = document.createElement("a"), this._sharedLink.className = "yh-btn yh-btn-icon yh-shared-link", this._sharedLink.setAttribute("aria-label", "Về YunDev.space"), this._sharedLink.title = "Về YunDev.space", this._sharedLink.hidden = !0, this._sharedLink.appendChild(W()), o.append(c, this._sharedLink, s, this._themeBtn, this._accountDesktop, this._mobileToggleBtn), t.append(this._skipLink, n, a, o), this._expiredNotice = document.createElement("div"), this._expiredNotice.className = "yh-expired-notice", this._expiredNotice.setAttribute("role", "status"), this._expiredNotice.hidden = !0;
 		let l = document.createElement("span");
-		l.textContent = "Đăng xuất không thành công, bạn vẫn đang đăng nhập.";
+		l.textContent = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
 		let u = document.createElement("button");
-		u.type = "button", u.className = "yh-btn yh-btn-primary", u.textContent = "Thử lại", u.addEventListener("click", () => {
+		u.type = "button", u.className = "yh-btn yh-btn-primary", u.textContent = "Đăng nhập lại", u.addEventListener("click", () => {
+			this._handleAuthClick("signin");
+		}), this._expiredNotice.append(l, u), this._logoutNotice = document.createElement("div"), this._logoutNotice.className = "yh-logout-notice", this._logoutNotice.setAttribute("role", "alert"), this._logoutNotice.hidden = !0;
+		let d = document.createElement("span");
+		d.textContent = "Đăng xuất không thành công, bạn vẫn đang đăng nhập.";
+		let f = document.createElement("button");
+		f.type = "button", f.className = "yh-btn yh-btn-primary", f.textContent = "Thử lại", f.addEventListener("click", () => {
 			this._handleLogout();
-		}), this._logoutNotice.append(l, u), this._sheetBackdrop = document.createElement("div"), this._sheetBackdrop.className = "yh-sheet-backdrop", this._sheetBackdrop.hidden = !0, this._sheetBackdrop.addEventListener("click", (e) => {
+		}), this._logoutNotice.append(d, f), this._sheetBackdrop = document.createElement("div"), this._sheetBackdrop.className = "yh-sheet-backdrop", this._sheetBackdrop.hidden = !0, this._sheetBackdrop.addEventListener("click", (e) => {
 			e.target === this._sheetBackdrop && this._setSheetOpen(!1, !0);
-		}), this._sheetDialog = document.createElement("div"), this._sheetDialog.className = "yh-sheet", this._sheetDialog.setAttribute("role", "dialog"), this._sheetDialog.setAttribute("aria-modal", "true"), this._sheetDialog.setAttribute("aria-label", "Menu"), this._sheetDialog.addEventListener("keydown", (e) => {
+		}), this._sheetDialog = document.createElement("div"), this._sheetDialog.className = "yh-sheet", this._sheetDialog.setAttribute("role", "dialog"), this._sheetDialog.setAttribute("aria-modal", "true"), this._sheetDialog.id = "yh-sheet", this._sheetDialog.setAttribute("aria-label", "Menu"), this._sheetDialog.addEventListener("keydown", (e) => {
 			this._handleSheetKeyDown(e);
 		});
-		let d = document.createElement("div");
-		d.className = "yh-sheet-header";
-		let f = document.createElement("span");
-		f.className = "yh-sheet-title", f.textContent = "Menu", this._sheetCloseBtn = document.createElement("button"), this._sheetCloseBtn.type = "button", this._sheetCloseBtn.className = "yh-btn yh-btn-icon", this._sheetCloseBtn.setAttribute("aria-label", "Đóng menu"), this._sheetCloseBtn.appendChild(z("M18 6L6 18M6 6l12 12")), this._sheetCloseBtn.addEventListener("click", () => {
+		let p = document.createElement("div");
+		p.className = "yh-sheet-header";
+		let m = document.createElement("span");
+		m.className = "yh-sheet-title", m.textContent = "Menu", this._sheetCloseBtn = document.createElement("button"), this._sheetCloseBtn.type = "button", this._sheetCloseBtn.className = "yh-btn yh-btn-icon", this._sheetCloseBtn.setAttribute("aria-label", "Đóng menu"), this._sheetCloseBtn.appendChild(H("M18 6L6 18M6 6l12 12")), this._sheetCloseBtn.addEventListener("click", () => {
 			this._setSheetOpen(!1, !0);
-		}), d.append(f, this._sheetCloseBtn), this._sheetNav = document.createElement("div"), this._sheetNav.className = "yh-sheet-nav", this._sheetAccount = document.createElement("div"), this._sheetAccount.className = "yh-sheet-account", this._sheetDialog.append(d, this._sheetNav, this._sheetAccount), this._sheetBackdrop.appendChild(this._sheetDialog), this._liveRegion = document.createElement("div"), this._liveRegion.className = "yh-sr-only", this._liveRegion.setAttribute("aria-live", "polite"), this._liveRegion.setAttribute("aria-atomic", "true"), this._shadow.append(e, t, this._expiredNotice, this._logoutNotice, this._sheetBackdrop, this._liveRegion);
+		}), p.append(m, this._sheetCloseBtn), this._sheetNav = document.createElement("nav"), this._sheetNav.className = "yh-sheet-nav", this._sheetAccount = document.createElement("div"), this._sheetAccount.className = "yh-sheet-account", this._sheetDialog.append(p, this._sheetNav, this._sheetAccount), this._sheetBackdrop.appendChild(this._sheetDialog), this._liveRegion = document.createElement("div"), this._liveRegion.className = "yh-sr-only", this._liveRegion.setAttribute("aria-live", "polite"), this._liveRegion.setAttribute("aria-atomic", "true"), this._shadow.append(e, t, this._expiredNotice, this._logoutNotice, this._sheetBackdrop, this._liveRegion);
 	}
 	_syncAttributes() {
 		this._skipLink.href = this.skipTarget, this._themeBtn.hidden = this.hasAttribute("no-theme-toggle");
+		let e = this.navLabel;
+		this._nav.setAttribute("aria-label", e), this._sheetNav.setAttribute("aria-label", e), this._sharedLink.href = `${this.authBase}/`, this._sharedLink.hidden = !this.sharedNav, this._syncSheetSharedSection();
+	}
+	_syncAppTitleClass() {
+		let e = this._appTitleSlot.assignedElements({ flatten: !0 }).length > 0;
+		this._left.classList.toggle("yh-left--app", e);
+	}
+	_syncAppNavClass() {
+		let e = this._appNavSlot.assignedElements({ flatten: !0 }).length > 0;
+		this._nav.classList.toggle("yh-nav--app", e);
+	}
+	_setupResizeObserver() {
+		this._resizeObserver?.disconnect(), this._resizeObserver = null, !(typeof ResizeObserver > "u") && (this._resizeObserver = new ResizeObserver(() => {
+			this._updateAutoCollapse();
+		}), this._resizeObserver.observe(this._bar));
+	}
+	_setCollapsed(e) {
+		this._bar.classList.toggle("yh-collapsed", e), this._sheetBackdrop.classList.toggle("yh-collapsed", e);
+	}
+	_closeSheetIfToggleHidden() {
+		this._sheetOpen && getComputedStyle(this._mobileToggleBtn).display === "none" && this._setSheetOpen(!1, !1);
+	}
+	_navOverflows() {
+		return getComputedStyle(this._nav).display === "none" ? !1 : this._nav.scrollWidth > this._nav.clientWidth + 1 || this._bar.scrollWidth > this._bar.clientWidth + 1;
+	}
+	_updateAutoCollapse() {
+		if (!this._rendered) return;
+		if (this.getAttribute("collapse") !== "auto") {
+			this._autoCollapseWidth = 0, this._setCollapsed(!1), this._closeSheetIfToggleHidden();
+			return;
+		}
+		if (typeof ResizeObserver > "u") {
+			this._setCollapsed(window.innerWidth <= 1279), this._closeSheetIfToggleHidden();
+			return;
+		}
+		let e = this._bar.clientWidth;
+		e <= 0 || (this._bar.classList.contains("yh-collapsed") ? e > this._autoCollapseWidth && (this._setCollapsed(!1), this._navOverflows() ? (this._setCollapsed(!0), this._autoCollapseWidth = e) : this._autoCollapseWidth = 0) : this._navOverflows() && (this._setCollapsed(!0), this._autoCollapseWidth = e), this._closeSheetIfToggleHidden());
+	}
+	_syncSheetSharedSection() {
+		if (!this.sharedNav) {
+			this._sheetSection &&= (this._sheetSection.remove(), null);
+			return;
+		}
+		if (!this._sheetSection) {
+			let e = document.createElement("div");
+			e.className = "yh-sheet-section";
+			let t = document.createElement("p");
+			t.className = "yh-sheet-heading", t.textContent = "YunDev.space";
+			let n = document.createElement("a");
+			n.textContent = "Về trang chủ YunDev.space", n.addEventListener("click", () => {
+				this._setSheetOpen(!1, !1);
+			}), e.append(t, n), this._sheetSection = e, this._sheetDialog.insertBefore(e, this._sheetAccount);
+		}
+		let e = this._sheetSection.querySelector("a");
+		e && (e.href = `${this.authBase}/`);
 	}
 	_renderThemeButton() {
 		if (!this._themeBtn) return;
 		let e = this.theme === "dark";
-		this._themeBtn.setAttribute("aria-pressed", String(e)), this._themeBtn.replaceChildren(e ? V() : B());
+		this._themeBtn.setAttribute("aria-pressed", String(e)), this._themeBtn.replaceChildren(e ? K() : G());
 	}
 	_announce(e) {
 		!this._liveRegion || this._lastAnnouncedAuthKey === e || (this._lastAnnouncedAuthKey = e, this._liveRegion.textContent = e);
@@ -559,7 +681,7 @@ var U = class extends HTMLElement {
 			cancelable: !0
 		}), n = this.dispatchEvent(t);
 		if (this._sheetOpen && this._setSheetOpen(!1, !1), n) {
-			let t = encodeURIComponent(P(window.location.href));
+			let t = encodeURIComponent(L(window.location.href));
 			window.location.assign(`${this.authBase}/?auth=${e}&next=${t}`);
 		}
 	}
@@ -568,7 +690,7 @@ var U = class extends HTMLElement {
 		this._loggingOut = !0, this._logoutError = !1, this._renderAccountRegions();
 		let e = !1;
 		try {
-			let t = L();
+			let t = B();
 			e = (await fetch(`${this.authBase}/api/auth/logout`, {
 				method: "POST",
 				credentials: "include",
@@ -627,28 +749,32 @@ var U = class extends HTMLElement {
 	}
 	_syncMobileNavClone() {
 		this._sheetNav.replaceChildren();
-		let e = this._navSlot.assignedElements({ flatten: !0 });
-		for (let t of e) {
-			let e = t.cloneNode(!0);
-			e instanceof HTMLElement && (e.removeAttribute("slot"), e.addEventListener("click", (e) => {
-				e.target?.closest("a") && this._setSheetOpen(!1, !1);
-			})), this._sheetNav.appendChild(e);
+		let e = this._navSlot.assignedElements({ flatten: !0 }), t = this._appNavSlot.assignedElements({ flatten: !0 }), n = [...e, ...t], r = t.length > 0 || this.sharedNav;
+		if (n.length > 0 && r) {
+			let e = document.createElement("p");
+			e.className = "yh-sheet-heading", e.textContent = this.navLabel, this._sheetNav.appendChild(e);
+		}
+		for (let e of n) {
+			let t = e.cloneNode(!0);
+			t instanceof HTMLElement && (t.removeAttribute("slot"), t.removeAttribute("id"), Array.from(t.querySelectorAll("[id]")).forEach((e) => e.removeAttribute("id")), t.addEventListener("click", (e) => {
+				(e.target instanceof Element ? e.target : null)?.closest("a") && this._setSheetOpen(!1, !1);
+			})), this._sheetNav.appendChild(t);
 		}
 	}
 	_handleSheetKeyDown(e) {
 		if (e.key !== "Tab") return;
-		let t = Array.from(this._sheetDialog.querySelectorAll("a[href], button:not([disabled]), [tabindex]:not([tabindex=\"-1\"])")).filter((e) => !e.hasAttribute("hidden"));
-		if (t.length === 0) return;
-		let n = t[0], r = t[t.length - 1], i = this._shadow.activeElement;
-		e.shiftKey && i === n ? (e.preventDefault(), r?.focus()) : !e.shiftKey && i === r && (e.preventDefault(), n?.focus());
+		let t = getComputedStyle(this._sheetAccount).display !== "none", n = Array.from(this._sheetDialog.querySelectorAll("a[href], button:not([disabled]), [tabindex]:not([tabindex=\"-1\"])")).filter((e) => !e.closest("[hidden]") && (t || !this._sheetAccount.contains(e)) && getComputedStyle(e).display !== "none");
+		if (n.length === 0) return;
+		let r = n[0], i = n[n.length - 1], a = this._shadow.activeElement;
+		e.shiftKey && a === r ? (e.preventDefault(), i?.focus()) : !e.shiftKey && a === i && (e.preventDefault(), r?.focus());
 	}
 	_renderAccountRegions() {
 		if (this._rendered) {
 			if (this._expiredNotice.hidden = this.hideAccount || this._state !== "expired", this._logoutNotice.hidden = this.hideAccount || !this._logoutError || this._state !== "signed-in", this.hideAccount) {
-				this._accountDesktop.hidden = !0, this._accountDesktop.replaceChildren(), this._sheetAccount.hidden = !0, this._sheetAccount.replaceChildren(), this._accountButtonEl = null, this._menuEl = null;
+				this._accountDesktop.hidden = !0, this._accountDesktop.replaceChildren(), this._sheetAccount.hidden = !0, this._sheetAccount.replaceChildren(), this._accountButtonEl = null, this._menuEl = null, this._autoCollapseWidth = 0, this._updateAutoCollapse();
 				return;
 			}
-			this._accountDesktop.hidden = !1, this._sheetAccount.hidden = !1, this._renderDesktopAccount(), this._renderSheetAccount();
+			this._accountDesktop.hidden = !1, this._sheetAccount.hidden = !1, this._renderDesktopAccount(), this._renderSheetAccount(), this._autoCollapseWidth = 0, this._updateAutoCollapse();
 		}
 	}
 	_renderDesktopAccount() {
@@ -667,7 +793,7 @@ var U = class extends HTMLElement {
 			let t = document.createElement("span");
 			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
 			let n = document.createElement("button");
-			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.title = "Thử lại", n.appendChild(z("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.title = "Thử lại", n.appendChild(H("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
 				this.refresh();
 			}), e.append(t, n), this._accountDesktop.appendChild(e);
 			return;
@@ -677,8 +803,8 @@ var U = class extends HTMLElement {
 			t.type = "button", t.className = "yh-account-btn", t.setAttribute("part", "account-button"), t.setAttribute("aria-haspopup", "menu"), t.setAttribute("aria-expanded", String(this._menuOpen)), t.setAttribute("aria-label", `Tài khoản: ${e.displayName}`);
 			let n = document.createElement("span");
 			n.className = "yh-account-name", n.textContent = e.displayName;
-			let r = z("M6 9l6 6 6-6", "yh-chevron");
-			t.append(H(e), n, r), t.addEventListener("click", () => {
+			let r = H("M6 9l6 6 6-6", "yh-chevron");
+			t.append(q(e), n, r), t.addEventListener("click", () => {
 				this._setMenuOpen(!this._menuOpen, !1);
 			}), t.addEventListener("keydown", (e) => {
 				e.key === "Enter" || e.key === " " || e.key === "ArrowDown" ? (e.preventDefault(), this._setMenuOpen(!0, !1), this._focusMenuItem(0)) : e.key === "Escape" && this._menuOpen && (e.preventDefault(), this._setMenuOpen(!1, !1));
@@ -694,17 +820,19 @@ var U = class extends HTMLElement {
 			let s = document.createElement("span");
 			s.className = "yh-menu-name", s.textContent = e.displayName;
 			let c = document.createElement("span");
-			c.className = "yh-menu-email", c.textContent = e.email ?? "", o.append(s, c), a.append(H(e), o);
+			c.className = "yh-menu-email", c.textContent = e.email ?? "", o.append(s, c), a.append(q(e), o);
 			let l = document.createElement("a");
 			l.className = "yh-menu-item", l.setAttribute("role", "menuitem"), l.href = this.profileUrl, l.textContent = "Hồ sơ";
-			let u = document.createElement("a");
-			u.className = "yh-menu-item", u.setAttribute("role", "menuitem"), u.href = this.authBase, u.textContent = "Về YunDev.space";
-			let d = document.createElement("hr");
-			d.className = "yh-menu-divider", d.setAttribute("role", "separator");
-			let f = document.createElement("button");
-			f.type = "button", f.className = "yh-menu-item", f.setAttribute("role", "menuitem"), f.disabled = this._loggingOut, f.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", f.addEventListener("click", () => {
+			let u = document.createElement("hr");
+			u.className = "yh-menu-divider", u.setAttribute("role", "separator");
+			let d = document.createElement("button");
+			if (d.type = "button", d.className = "yh-menu-item", d.setAttribute("role", "menuitem"), d.disabled = this._loggingOut, d.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", d.addEventListener("click", () => {
 				this._handleLogout();
-			}), i.append(a, l, u, d, f), this._accountButtonEl = t, this._menuEl = i, this._accountDesktop.append(t, i);
+			}), i.append(a, l), !this.sharedNav) {
+				let e = document.createElement("a");
+				e.className = "yh-menu-item", e.setAttribute("role", "menuitem"), e.href = this.authBase, e.textContent = "Về YunDev.space", i.appendChild(e);
+			}
+			i.append(u, d), this._accountButtonEl = t, this._menuEl = i, this._accountDesktop.append(t, i);
 			return;
 		}
 		let e = document.createElement("button");
@@ -732,7 +860,7 @@ var U = class extends HTMLElement {
 			let t = document.createElement("span");
 			t.className = "yh-muted-text", t.textContent = "Không tải được tài khoản";
 			let n = document.createElement("button");
-			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.appendChild(z("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
+			n.type = "button", n.className = "yh-btn yh-btn-icon", n.setAttribute("aria-label", "Thử lại"), n.appendChild(H("M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15")), n.addEventListener("click", () => {
 				this.refresh();
 			}), e.append(t, n), this._sheetAccount.appendChild(e);
 			return;
@@ -745,17 +873,19 @@ var U = class extends HTMLElement {
 			let r = document.createElement("span");
 			r.className = "yh-menu-name", r.textContent = e.displayName;
 			let i = document.createElement("span");
-			i.className = "yh-menu-email", i.textContent = e.email ?? "", n.append(r, i), t.append(H(e), n);
+			i.className = "yh-menu-email", i.textContent = e.email ?? "", n.append(r, i), t.append(q(e), n);
 			let a = document.createElement("div");
 			a.className = "yh-sheet-account-actions";
 			let o = document.createElement("a");
 			o.className = "yh-menu-item", o.href = this.profileUrl, o.textContent = "Hồ sơ";
-			let s = document.createElement("a");
-			s.className = "yh-menu-item", s.href = this.authBase, s.textContent = "Về YunDev.space";
-			let c = document.createElement("button");
-			c.type = "button", c.className = "yh-menu-item", c.disabled = this._loggingOut, c.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", c.addEventListener("click", () => {
+			let s = document.createElement("button");
+			if (s.type = "button", s.className = "yh-menu-item", s.disabled = this._loggingOut, s.textContent = this._loggingOut ? "Đang đăng xuất…" : "Đăng xuất (mọi site)", s.addEventListener("click", () => {
 				this._handleLogout();
-			}), a.append(o, s, c), this._sheetAccount.append(t, a);
+			}), a.appendChild(o), !this.sharedNav) {
+				let e = document.createElement("a");
+				e.className = "yh-menu-item", e.href = this.authBase, e.textContent = "Về YunDev.space", a.appendChild(e);
+			}
+			a.appendChild(s), this._sheetAccount.append(t, a);
 			return;
 		}
 		let e = document.createElement("div");
@@ -772,9 +902,9 @@ var U = class extends HTMLElement {
 };
 //#endregion
 //#region src/yun-header/index.ts
-function W(e = "yun-header") {
-	typeof customElements < "u" && !customElements.get(e) && customElements.define(e, U);
+function Y(e = "yun-header") {
+	typeof customElements < "u" && !customElements.get(e) && customElements.define(e, J);
 }
-b(), W();
+b(), Y();
 //#endregion
-export { s as THEME_COOKIE, c as THEME_EVENT, o as THEME_STORAGE_KEY, U as YunHeader, W as defineYunHeader, b as initTheme, j as isAllowedAuthOrigin, h as resolveTheme, v as setTheme };
+export { s as THEME_COOKIE, c as THEME_EVENT, o as THEME_STORAGE_KEY, x as YUN_HEADER_SLOT_API, J as YunHeader, Y as defineYunHeader, b as initTheme, P as isAllowedAuthOrigin, h as resolveTheme, v as setTheme };

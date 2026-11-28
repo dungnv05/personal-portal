@@ -13,14 +13,96 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 | `hide-account` | `boolean` | `false` | Hides the account block, expired-session notice, and logout-error notice. |
 | `skip-target` | `string` | `"#main"` | `href` for the skip link ("Bỏ qua đến nội dung"). Must match `/^#[A-Za-z][\w-]*$/`; otherwise falls back to `"#main"`. |
 | `no-theme-toggle` | `boolean` | `false` | Hides the built-in light/dark theme toggle button (escape hatch). |
+| `nav-label` | `string` | `"Điều hướng chính"` | Accessible `aria-label` for the `<nav>` landmark (desktop and mobile sheet) and the mobile sheet nav heading when app slots are used. Trimmed, control characters stripped, max 60 characters; empty/invalid falls back to `"Điều hướng chính"`. |
+| `collapse` | `"lg" \| "xl" \| "auto"` | `(unset)` | Mode at which `.yh-nav` (and `.yh-shared-link`) collapse into the mobile menu sheet: unset / default (`<=640px`), `"lg"` (`<=1023px`), `"xl"` (`<=1279px`), or `"auto"` (collapses at `<=1023px` and dynamically via `ResizeObserver` above `1023px` when `.yh-nav` overflows; falls back to `<=1279px` without `ResizeObserver`). Desktop account stays in the bar above `640px`. Changing `collapse` or resizing out of collapsed state closes an open sheet automatically. |
+| `shared-nav` | `boolean` | `false` | Opt-in. Renders a desktop 4-square grid icon link (`Về YunDev.space` → `${authBase}/`) before the theme toggle (hidden when collapsed) and a `YunDev.space` section in the mobile sheet. |
 
 ## Slots
 
 | Slot | Description |
 | --- | --- |
-| `brand` | App logo and title on the left. |
-| `nav` | Primary navigation links (automatically cloned into the mobile sheet on `<=640px`). |
-| `actions` | Non-auth action controls placed before the built-in theme toggle and account block. |
+| `app-title` | Styled app logo/title on the left (`inline-flex`, `min-height: 44px`, `--yh-ink`, bold). |
+| `app-nav` | Styled primary navigation links (`<a slot="app-nav" href="...">` directly, no nested `<nav>`). Centers `.yh-nav`, supports `aria-current="page"`, and merges into the mobile sheet. |
+| `app-actions` | App action controls placed before the shared link, theme toggle, and account block (`inline-flex`). Stays in the bar on mobile (not cloned into the sheet) so JS event listeners keep working. |
+| `brand` | Legacy alias for left-side brand content (unstyled, kept for backward compatibility). |
+| `nav` | Legacy alias for primary navigation links (unstyled, cloned into the mobile sheet before `app-nav`). |
+| `actions` | Legacy alias for action controls (unstyled, placed after `app-actions` and `.yh-shared-link`, before the theme toggle). |
+
+## App slots — single header bar (SLOT_API 1)
+
+Subdomains (`brse.yundev.space`, etc.) can render a single unified header bar by injecting their app title, navigation links, and actions directly into `<yun-header>`.
+
+### Slots & Legacy Aliases
+
+| Slot | Status | Role | Shadow Styling |
+| --- | --- | --- | --- |
+| `app-title` | New (`SLOT_API 1`) | App logo / title in `.yh-left` | `inline-flex`, `gap: 8px`, `min-height: 44px`, `--yh-ink`, `font-weight: 700` |
+| `app-nav` | New (`SLOT_API 1`) | Direct `<a href="...">` links in `.yh-nav` | `inline-flex`, `min-height: 40px`, `--yh-muted`, hover pill, `aria-current="page"` underline, focus ring |
+| `app-actions` | New (`SLOT_API 1`) | App controls (search, CTA, etc.) in `.yh-right` | `inline-flex`, `align-items: center` |
+| `brand` | Legacy alias | Left-side brand | Unstyled |
+| `nav` | Legacy alias | Navigation links | Unstyled |
+| `actions` | Legacy alias | Right-side actions | Unstyled |
+
+Use `aria-current="page"` on the active `<a slot="app-nav">` link to highlight it with `--yh-primary` both in the desktop bar and inside the mobile menu sheet.
+
+**Overflow guard & plain-`href` links:** `.yh-nav--app` applies `justify-content: safe center` with `overflow-x: auto` (hidden scrollbar) and `flex: 0 0 auto; white-space: nowrap` on slotted links, while `app-title` + `.yh-left--app` set `flex-shrink: 0; white-space: nowrap` so titles never wrap or overlap right-hand controls. `app-nav` links must be plain `<a href="...">` links because their clones inside `#yh-sheet` do not keep light-DOM JS event listeners.
+
+**Choosing `collapse` (`lg` / `xl` / `auto`):**
+- unset / default: collapses at `<=640px` for minimal headers.
+- `lg` (`<=1023px`) / `xl` (`<=1279px`): static breakpoints for fixed-width navs; desktop account stays in the bar above `640px` (`.yh-account-name` hidden at `641px–1023px`).
+- `auto` (recommended for any app whose nav width is not fixed): always collapsed at `<=1023px`, and above `1023px` uses `ResizeObserver` on `.yh-bar` with hysteresis to collapse only when `.yh-nav` overflows (falling back to `<=1279px` when `ResizeObserver` is unavailable). An open sheet closes automatically whenever the toggle becomes hidden on collapse/resize changes.
+
+### Mobile Menu Merge Rules
+
+When the mobile sheet (`#yh-sheet`) opens:
+1. **App & legacy navigation**: Clones assigned elements from `nav` (first) and `app-nav` (second) into `<nav class="yh-sheet-nav">`. Every `slot` attribute and every `id` attribute in the cloned subtree is stripped to prevent duplicate IDs, while `aria-current` is preserved. When `app-nav` has items or `shared-nav` is set, a `<p class="yh-sheet-heading">` with `nav-label` is rendered above the links.
+2. **YunDev.space section**: When `shared-nav` is present, a `<div class="yh-sheet-section">` with heading `YunDev.space` and link `Về trang chủ YunDev.space` → `${authBase}/` is rendered after the nav.
+3. **Account block**: Rendered at the bottom (hidden on `641px–1023px` when `collapse="lg"` since the desktop account button remains visible there). The sheet's `Tab` / `Shift+Tab` focus trap skips hidden elements and hidden containers (such as `.yh-sheet-account` when `display: none`).
+4. **`app-actions` are NOT cloned**: Controls in `app-actions` remain in `.yh-right` at all viewport widths so their DOM state and JS event listeners keep working without duplication.
+
+### Feature Detection & Fallback
+
+```js
+customElements.whenDefined('yun-header').then((Ctor) => {
+  if (Ctor.SLOT_API >= 1) {
+    // Mount app-title, app-nav, app-actions into <yun-header>
+  } else {
+    legacyFallback()
+  }
+})
+```
+
+You can also import `YUN_HEADER_SLOT_API` from the module (`1`).
+
+### Full HTML Example (Subdomain)
+
+```html
+<yun-header
+  app="brse"
+  auth-base="https://www.yundev.space"
+  nav-label="Điều hướng BrSE"
+  collapse="lg"
+  shared-nav
+>
+  <a slot="app-title" href="/">BrSE Study</a>
+
+  <a slot="app-nav" href="/roadmap" aria-current="page">Lộ trình</a>
+  <a slot="app-nav" href="/kanji">Kanji</a>
+  <a slot="app-nav" href="/mock-test">Thi thử</a>
+
+  <button slot="app-actions" type="button" id="open-search">Tìm kiếm</button>
+</yun-header>
+```
+
+### CSP & Security Notes
+
+- All Shadow DOM nodes are built with `document.createElement` and `textContent` only (no `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `eval`, `new Function`, or inline `on*=` handler strings).
+- `nav-label` strips ASCII control characters and truncates to 60 characters.
+- `shared-nav` links always use the allowlisted, sanitized `authBase`.
+
+### Backward Compatibility
+
+Pages that do not use `app-title`, `app-nav`, `app-actions`, `nav-label`, `collapse`, or `shared-nav` render identically to previous versions (no `.yh-nav--app` class, no `.yh-sheet-heading`, no `.yh-sheet-section`, `.yh-shared-link` hidden), with one intentional contrast fix: `.yh-mobile-toggle` now uses `var(--yh-control-border, var(--yh-muted, #B8B3C7))` for its border colour (WCAG 1.4.11 >= 3:1).
 
 ## Properties & Methods
 
@@ -33,7 +115,7 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 
 ## Built-in Light / Dark Theme
 
-`<yun-header>` includes a built-in 42×42px light/dark toggle button in `.yh-right` (after `slot="actions"` and before the account block), visible at all viewport widths unless `no-theme-toggle` is set:
+`<yun-header>` includes a built-in 42×42px light/dark toggle button in `.yh-right` (after `slot="app-actions"`, `.yh-shared-link`, and `slot="actions"`, and before the account block), visible at all viewport widths unless `no-theme-toggle` is set:
 
 - Shows a moon icon while `light` and a sun icon while `dark` (`title` / `aria-label` = `"Chuyển chế độ sáng/tối"`, `aria-pressed="true"` when dark).
 - Read precedence: cookie `yun_theme` → `localStorage['yun-theme']` → legacy `localStorage['theme']` → `prefers-color-scheme: dark` (defaulting to `'light'`).
@@ -73,7 +155,9 @@ All events bubble and are `composed: true` (except `yh-theme-change`, which is d
 
 Set these CSS custom properties on `yun-header` (or `:root`):
 
-`--yh-bg`, `--yh-surface`, `--yh-ink`, `--yh-muted`, `--yh-primary`, `--yh-on-primary`, `--yh-focus`, `--yh-border`, `--yh-font`, `--yh-radius`, `--yh-toggle-border`, `--yh-toggle-hover-bg`, `--yh-toggle-radius`
+`--yh-bg`, `--yh-surface`, `--yh-ink`, `--yh-muted`, `--yh-primary`, `--yh-on-primary`, `--yh-focus`, `--yh-border`, `--yh-control-border`, `--yh-font`, `--yh-radius`, `--yh-toggle-border`, `--yh-toggle-hover-bg`, `--yh-toggle-radius`
+
+`--yh-control-border` controls the border colour of `.yh-mobile-toggle`, `.yh-shared-link`, and `.yh-theme-toggle` (`.yh-mobile-toggle` and `.yh-shared-link` default to `var(--yh-muted, #B8B3C7)`; `.yh-theme-toggle` falls back to `var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1)))`).
 
 ### Per-App Token Table
 
@@ -115,3 +199,5 @@ Set these CSS custom properties on `yun-header` (or `:root`):
      </nav>
    </yun-header>
    ```
+
+**Re-vendor checklist:** Set `--yh-control-border` (`>= 3:1` contrast against the bar) to get consistent WCAG 1.4.11-compliant control borders across `.yh-mobile-toggle`, `.yh-theme-toggle`, and `.yh-shared-link`; apps that do not set `--yh-control-border` keep the old faint theme-toggle border and a muted menu-button border.

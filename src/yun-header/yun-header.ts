@@ -24,7 +24,11 @@ export interface YunHeaderMenuToggleDetail {
   open: boolean
 }
 
+export const YUN_HEADER_SLOT_API = 1
+
 const DEFAULT_AUTH_BASE = 'https://www.yundev.space'
+const DEFAULT_NAV_LABEL = 'Điều hướng chính'
+const MAX_NAV_LABEL_LENGTH = 60
 const LOADING_TIMEOUT_MS = 3000
 const ALLOW_LOCALHOST: boolean = import.meta.env.DEV === true
 const SKIP_TARGET_PATTERN = /^#[A-Za-z][\w-]*$/
@@ -89,6 +93,10 @@ const STYLES = `
   min-width: 0;
 }
 
+.yh-left--app {
+  flex-shrink: 0;
+}
+
 .yh-nav {
   display: flex;
   align-items: center;
@@ -112,7 +120,7 @@ const STYLES = `
   height: 42px;
   padding: 0;
   border-radius: var(--yh-toggle-radius, 12px);
-  border: 1px solid var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1)));
+  border: 1px solid var(--yh-control-border, var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1))));
   background: transparent;
   color: var(--yh-muted, #B8B3C7);
   cursor: pointer;
@@ -379,6 +387,7 @@ const STYLES = `
 }
 
 .yh-mobile-toggle {
+  border-color: var(--yh-control-border, var(--yh-muted, #B8B3C7));
   display: none;
 }
 
@@ -464,6 +473,124 @@ const STYLES = `
   outline-offset: 2px;
 }
 
+slot[name="app-title"]::slotted(*) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: 44px;
+  min-width: 0;
+  color: var(--yh-ink, #F2EFF7);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+slot[name="app-title"]::slotted(:focus-visible) {
+  outline: 2px solid var(--yh-focus, #A78BFA);
+  outline-offset: 2px;
+  border-radius: calc(var(--yh-radius, 12px) - 4px);
+}
+
+slot[name="app-nav"]::slotted(a) {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: calc(var(--yh-radius, 12px) - 4px);
+  color: var(--yh-muted, #B8B3C7);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+slot[name="app-nav"]::slotted(a:hover) {
+  color: var(--yh-ink, #F2EFF7);
+  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);
+}
+
+slot[name="app-nav"]::slotted(a[aria-current="page"]) {
+  color: var(--yh-ink, #F2EFF7);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--yh-primary, #A78BFA);
+}
+
+slot[name="app-nav"]::slotted(a:focus-visible) {
+  outline: 2px solid var(--yh-focus, #A78BFA);
+  outline-offset: 2px;
+}
+
+slot[name="app-actions"]::slotted(*) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.yh-nav--app {
+  flex: 1 1 auto;
+  justify-content: safe center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding-block: 4px;
+}
+
+.yh-nav--app::-webkit-scrollbar {
+  display: none;
+}
+
+.yh-shared-link {
+  border-color: var(--yh-control-border, var(--yh-muted, #B8B3C7));
+}
+
+.yh-shared-link[hidden] {
+  display: none;
+}
+
+.yh-sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.yh-sheet-heading {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--yh-muted, #B8B3C7);
+}
+
+.yh-sheet-nav a,
+.yh-sheet-section a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: calc(var(--yh-radius, 12px) - 4px);
+  color: var(--yh-ink, #F2EFF7);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.yh-sheet-nav a:hover,
+.yh-sheet-nav a:focus-visible,
+.yh-sheet-section a:hover,
+.yh-sheet-section a:focus-visible {
+  background: color-mix(in srgb, var(--yh-ink, #F2EFF7) 8%, transparent);
+}
+
+.yh-sheet-nav a[aria-current="page"],
+.yh-sheet-section a[aria-current="page"] {
+  font-weight: 700;
+  background: color-mix(in srgb, var(--yh-primary, #A78BFA) 14%, transparent);
+  box-shadow: inset 3px 0 0 var(--yh-primary, #A78BFA);
+}
+
 @media (min-width: 641px) and (max-width: 1023px) {
   .yh-account-name {
     display: none;
@@ -485,9 +612,75 @@ const STYLES = `
     display: inline-flex;
   }
 
+  .yh-shared-link {
+    display: none;
+  }
+
   .yh-expired-notice,
   .yh-logout-notice {
     padding: 8px 16px;
+  }
+}
+
+@media (max-width: 1023px) {
+  :host([collapse="lg"]) .yh-nav,
+  :host([collapse="auto"]) .yh-nav {
+    display: none;
+  }
+
+  :host([collapse="lg"]) .yh-mobile-toggle,
+  :host([collapse="auto"]) .yh-mobile-toggle {
+    display: inline-flex;
+  }
+
+  :host([collapse="lg"]) .yh-shared-link,
+  :host([collapse="auto"]) .yh-shared-link {
+    display: none;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1023px) {
+  :host([collapse="lg"]) .yh-sheet-account,
+  :host([collapse="auto"]) .yh-sheet-account {
+    display: none;
+  }
+}
+
+@media (max-width: 1279px) {
+  :host([collapse="xl"]) .yh-nav {
+    display: none;
+  }
+
+  :host([collapse="xl"]) .yh-mobile-toggle {
+    display: inline-flex;
+  }
+
+  :host([collapse="xl"]) .yh-shared-link {
+    display: none;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1279px) {
+  :host([collapse="xl"]) .yh-sheet-account {
+    display: none;
+  }
+}
+
+.yh-bar.yh-collapsed .yh-nav {
+  display: none;
+}
+
+.yh-bar.yh-collapsed .yh-mobile-toggle {
+  display: inline-flex;
+}
+
+.yh-bar.yh-collapsed .yh-shared-link {
+  display: none;
+}
+
+@media (min-width: 641px) {
+  .yh-sheet-backdrop.yh-collapsed .yh-sheet-account {
+    display: none;
   }
 }
 
@@ -734,6 +927,49 @@ function createSvgIcon(pathD: string, className?: string): SVGSVGElement {
   return svg
 }
 
+function sanitizeNavLabel(raw: string | null): string {
+  if (!raw) {
+    return DEFAULT_NAV_LABEL
+  }
+  let cleaned = ''
+  for (let i = 0; i < raw.length; i += 1) {
+    const code = raw.charCodeAt(i)
+    if (code > 0x1f && code !== 0x7f) {
+      cleaned += raw[i]
+    }
+  }
+  const trimmed = cleaned.trim()
+  if (!trimmed) {
+    return DEFAULT_NAV_LABEL
+  }
+  const chars = Array.from(trimmed)
+  if (chars.length <= MAX_NAV_LABEL_LENGTH) {
+    return trimmed
+  }
+  return chars.slice(0, MAX_NAV_LABEL_LENGTH).join('').trim() || DEFAULT_NAV_LABEL
+}
+
+function createGridIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = createSvgBase()
+  const rects: Array<[string, string]> = [
+    ['3', '3'],
+    ['14', '3'],
+    ['3', '14'],
+    ['14', '14'],
+  ]
+  for (const [x, y] of rects) {
+    const rect = document.createElementNS(ns, 'rect')
+    rect.setAttribute('x', x)
+    rect.setAttribute('y', y)
+    rect.setAttribute('width', '7')
+    rect.setAttribute('height', '7')
+    rect.setAttribute('rx', '1')
+    svg.appendChild(rect)
+  }
+  return svg
+}
+
 function createMoonIcon(): SVGSVGElement {
   return createSvgIcon('M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z')
 }
@@ -788,8 +1024,9 @@ function createAvatarNode(user: YunHeaderUser): HTMLElement {
 }
 
 export class YunHeader extends HTMLElement {
+  static readonly SLOT_API = YUN_HEADER_SLOT_API
   static get observedAttributes(): string[] {
-    return ['app', 'auth-base', 'variant', 'profile-url', 'hide-account', 'skip-target', 'no-theme-toggle']
+    return ['app', 'auth-base', 'variant', 'profile-url', 'hide-account', 'skip-target', 'no-theme-toggle', 'nav-label', 'collapse', 'shared-nav']
   }
 
   private _state: YunHeaderState = 'loading'
@@ -815,12 +1052,21 @@ export class YunHeader extends HTMLElement {
   private _sheetBackdrop!: HTMLDivElement
   private _sheetDialog!: HTMLDivElement
   private _sheetCloseBtn!: HTMLButtonElement
-  private _sheetNav!: HTMLDivElement
+  private _nav!: HTMLElement
+  private _bar!: HTMLElement
+  private _left!: HTMLDivElement
+  private _appTitleSlot!: HTMLSlotElement
+  private _appNavSlot!: HTMLSlotElement
+  private _sharedLink!: HTMLAnchorElement
+  private _sheetNav!: HTMLElement
+  private _sheetSection: HTMLDivElement | null = null
   private _sheetAccount!: HTMLDivElement
   private _navSlot!: HTMLSlotElement
   private _liveRegion!: HTMLDivElement
   private _accountButtonEl: HTMLButtonElement | null = null
   private _menuEl: HTMLDivElement | null = null
+  private _resizeObserver: ResizeObserver | null = null
+  private _autoCollapseWidth = 0
 
   private readonly _onWindowFocus = () => {
     void this.refresh()
@@ -852,6 +1098,14 @@ export class YunHeader extends HTMLElement {
       event.preventDefault()
       this._setMenuOpen(false, true)
     }
+  }
+
+  private readonly _onWindowResize = () => {
+    if (typeof ResizeObserver === 'undefined' && this.getAttribute('collapse') === 'auto') {
+      this._updateAutoCollapse()
+      return
+    }
+    this._closeSheetIfToggleHidden()
   }
 
   private readonly _onThemeChange = () => {
@@ -899,6 +1153,14 @@ export class YunHeader extends HTMLElement {
     return this.hasAttribute('hide-account')
   }
 
+  private get navLabel(): string {
+    return sanitizeNavLabel(this.getAttribute('nav-label'))
+  }
+
+  private get sharedNav(): boolean {
+    return this.hasAttribute('shared-nav')
+  }
+
   private get skipTarget(): string {
     const raw = this.getAttribute('skip-target')?.trim()
     return raw && SKIP_TARGET_PATTERN.test(raw) ? raw : '#main'
@@ -908,7 +1170,20 @@ export class YunHeader extends HTMLElement {
     this._ensureDom()
     this._syncAttributes()
     this._renderThemeButton()
+    this._syncAppTitleClass()
+    this._syncAppNavClass()
+    this._setupResizeObserver()
+    this._updateAutoCollapse()
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        if (this.isConnected) {
+          this._autoCollapseWidth = 0
+          this._updateAutoCollapse()
+        }
+      })
+    }
     window.addEventListener('focus', this._onWindowFocus)
+    window.addEventListener('resize', this._onWindowResize)
     document.addEventListener('visibilitychange', this._onVisibilityChange)
     document.addEventListener('click', this._onDocumentClick)
     document.addEventListener('keydown', this._onDocumentKeyDown)
@@ -917,7 +1192,10 @@ export class YunHeader extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    this._resizeObserver?.disconnect()
+    this._resizeObserver = null
     window.removeEventListener('focus', this._onWindowFocus)
+    window.removeEventListener('resize', this._onWindowResize)
     document.removeEventListener('visibilitychange', this._onVisibilityChange)
     document.removeEventListener('click', this._onDocumentClick)
     document.removeEventListener('keydown', this._onDocumentKeyDown)
@@ -932,6 +1210,20 @@ export class YunHeader extends HTMLElement {
     this._syncAttributes()
     if (name === 'auth-base') {
       void this.refresh()
+    } else if (name === 'nav-label') {
+      if (this._sheetOpen) {
+        this._syncMobileNavClone()
+      }
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    } else if (name === 'shared-nav') {
+      if (this._sheetOpen) {
+        this._syncMobileNavClone()
+      }
+      this._renderAccountRegions()
+    } else if (name === 'collapse') {
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
     } else if (name === 'hide-account' || name === 'profile-url') {
       this._renderAccountRegions()
     }
@@ -1121,6 +1413,7 @@ export class YunHeader extends HTMLElement {
     styleEl.textContent = STYLES
 
     const header = document.createElement('header')
+    this._bar = header
     header.setAttribute('part', 'bar')
     header.className = 'yh-bar'
 
@@ -1129,12 +1422,26 @@ export class YunHeader extends HTMLElement {
     this._skipLink.textContent = 'Bỏ qua đến nội dung'
 
     const left = document.createElement('div')
+    this._left = left
     left.className = 'yh-left'
     const brandSlot = document.createElement('slot')
     brandSlot.name = 'brand'
-    left.appendChild(brandSlot)
+    brandSlot.addEventListener('slotchange', () => {
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
+    const appTitleSlot = document.createElement('slot')
+    this._appTitleSlot = appTitleSlot
+    appTitleSlot.name = 'app-title'
+    appTitleSlot.addEventListener('slotchange', () => {
+      this._syncAppTitleClass()
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
+    left.append(brandSlot, appTitleSlot)
 
-    const nav = document.createElement('nav')
+    this._nav = document.createElement('nav')
+    const nav = this._nav
     nav.className = 'yh-nav'
     nav.setAttribute('aria-label', 'Điều hướng chính')
     this._navSlot = document.createElement('slot')
@@ -1143,13 +1450,29 @@ export class YunHeader extends HTMLElement {
       if (this._sheetOpen) {
         this._syncMobileNavClone()
       }
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
     })
-    nav.appendChild(this._navSlot)
+    this._appNavSlot = document.createElement('slot')
+    this._appNavSlot.name = 'app-nav'
+    this._appNavSlot.addEventListener('slotchange', () => {
+      this._syncAppNavClass()
+      if (this._sheetOpen) {
+        this._syncMobileNavClone()
+      }
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
+    nav.append(this._navSlot, this._appNavSlot)
 
     const right = document.createElement('div')
     right.className = 'yh-right'
     const actionsSlot = document.createElement('slot')
     actionsSlot.name = 'actions'
+    actionsSlot.addEventListener('slotchange', () => {
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
 
     this._themeBtn = document.createElement('button')
     this._themeBtn.type = 'button'
@@ -1168,12 +1491,28 @@ export class YunHeader extends HTMLElement {
     this._mobileToggleBtn.className = 'yh-btn yh-btn-icon yh-mobile-toggle'
     this._mobileToggleBtn.setAttribute('aria-label', 'Mở menu')
     this._mobileToggleBtn.setAttribute('aria-expanded', 'false')
+    this._mobileToggleBtn.setAttribute('aria-haspopup', 'dialog')
+    this._mobileToggleBtn.setAttribute('aria-controls', 'yh-sheet')
     this._mobileToggleBtn.appendChild(createSvgIcon('M4 6h16M4 12h16M4 18h16'))
     this._mobileToggleBtn.addEventListener('click', () => {
       this._setSheetOpen(!this._sheetOpen, false)
     })
 
-    right.append(actionsSlot, this._themeBtn, this._accountDesktop, this._mobileToggleBtn)
+    const appActionsSlot = document.createElement('slot')
+    appActionsSlot.name = 'app-actions'
+    appActionsSlot.addEventListener('slotchange', () => {
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
+
+    this._sharedLink = document.createElement('a')
+    this._sharedLink.className = 'yh-btn yh-btn-icon yh-shared-link'
+    this._sharedLink.setAttribute('aria-label', 'Về YunDev.space')
+    this._sharedLink.title = 'Về YunDev.space'
+    this._sharedLink.hidden = true
+    this._sharedLink.appendChild(createGridIcon())
+
+    right.append(appActionsSlot, this._sharedLink, actionsSlot, this._themeBtn, this._accountDesktop, this._mobileToggleBtn)
     header.append(this._skipLink, left, nav, right)
 
     this._expiredNotice = document.createElement('div')
@@ -1221,6 +1560,7 @@ export class YunHeader extends HTMLElement {
     this._sheetDialog.className = 'yh-sheet'
     this._sheetDialog.setAttribute('role', 'dialog')
     this._sheetDialog.setAttribute('aria-modal', 'true')
+    this._sheetDialog.id = 'yh-sheet'
     this._sheetDialog.setAttribute('aria-label', 'Menu')
     this._sheetDialog.addEventListener('keydown', (event) => {
       this._handleSheetKeyDown(event)
@@ -1241,7 +1581,7 @@ export class YunHeader extends HTMLElement {
     })
     sheetHeader.append(sheetTitle, this._sheetCloseBtn)
 
-    this._sheetNav = document.createElement('div')
+    this._sheetNav = document.createElement('nav')
     this._sheetNav.className = 'yh-sheet-nav'
 
     this._sheetAccount = document.createElement('div')
@@ -1268,6 +1608,124 @@ export class YunHeader extends HTMLElement {
   private _syncAttributes(): void {
     this._skipLink.href = this.skipTarget
     this._themeBtn.hidden = this.hasAttribute('no-theme-toggle')
+    const label = this.navLabel
+    this._nav.setAttribute('aria-label', label)
+    this._sheetNav.setAttribute('aria-label', label)
+    this._sharedLink.href = `${this.authBase}/`
+    this._sharedLink.hidden = !this.sharedNav
+    this._syncSheetSharedSection()
+  }
+
+  private _syncAppTitleClass(): void {
+    const hasAppTitle = this._appTitleSlot.assignedElements({ flatten: true }).length > 0
+    this._left.classList.toggle('yh-left--app', hasAppTitle)
+  }
+
+  private _syncAppNavClass(): void {
+    const hasAppNav = this._appNavSlot.assignedElements({ flatten: true }).length > 0
+    this._nav.classList.toggle('yh-nav--app', hasAppNav)
+  }
+
+  private _setupResizeObserver(): void {
+    this._resizeObserver?.disconnect()
+    this._resizeObserver = null
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+    this._resizeObserver = new ResizeObserver(() => {
+      this._updateAutoCollapse()
+    })
+    this._resizeObserver.observe(this._bar)
+  }
+
+  private _setCollapsed(collapsed: boolean): void {
+    this._bar.classList.toggle('yh-collapsed', collapsed)
+    this._sheetBackdrop.classList.toggle('yh-collapsed', collapsed)
+  }
+
+  private _closeSheetIfToggleHidden(): void {
+    if (this._sheetOpen && getComputedStyle(this._mobileToggleBtn).display === 'none') {
+      this._setSheetOpen(false, false)
+    }
+  }
+
+  private _navOverflows(): boolean {
+    if (getComputedStyle(this._nav).display === 'none') {
+      return false
+    }
+    return (
+      this._nav.scrollWidth > this._nav.clientWidth + 1 ||
+      this._bar.scrollWidth > this._bar.clientWidth + 1
+    )
+  }
+
+  private _updateAutoCollapse(): void {
+    if (!this._rendered) {
+      return
+    }
+    if (this.getAttribute('collapse') !== 'auto') {
+      this._autoCollapseWidth = 0
+      this._setCollapsed(false)
+      this._closeSheetIfToggleHidden()
+      return
+    }
+    if (typeof ResizeObserver === 'undefined') {
+      this._setCollapsed(window.innerWidth <= 1279)
+      this._closeSheetIfToggleHidden()
+      return
+    }
+    const barWidth = this._bar.clientWidth
+    if (barWidth <= 0) {
+      return
+    }
+    const isCollapsed = this._bar.classList.contains('yh-collapsed')
+    if (!isCollapsed) {
+      if (this._navOverflows()) {
+        this._setCollapsed(true)
+        this._autoCollapseWidth = barWidth
+      }
+    } else if (barWidth > this._autoCollapseWidth) {
+      this._setCollapsed(false)
+      if (this._navOverflows()) {
+        this._setCollapsed(true)
+        this._autoCollapseWidth = barWidth
+      } else {
+        this._autoCollapseWidth = 0
+      }
+    }
+    this._closeSheetIfToggleHidden()
+  }
+
+  private _syncSheetSharedSection(): void {
+    if (!this.sharedNav) {
+      if (this._sheetSection) {
+        this._sheetSection.remove()
+        this._sheetSection = null
+      }
+      return
+    }
+    if (!this._sheetSection) {
+      const section = document.createElement('div')
+      section.className = 'yh-sheet-section'
+
+      const heading = document.createElement('p')
+      heading.className = 'yh-sheet-heading'
+      heading.textContent = 'YunDev.space'
+
+      const link = document.createElement('a')
+      link.textContent = 'Về trang chủ YunDev.space'
+      link.addEventListener('click', () => {
+        this._setSheetOpen(false, false)
+      })
+
+      section.append(heading, link)
+      this._sheetSection = section
+      this._sheetDialog.insertBefore(section, this._sheetAccount)
+    }
+    const link = this._sheetSection.querySelector('a')
+    if (link) {
+      link.href = `${this.authBase}/`
+    }
   }
 
   private _renderThemeButton(): void {
@@ -1455,13 +1913,24 @@ export class YunHeader extends HTMLElement {
 
   private _syncMobileNavClone(): void {
     this._sheetNav.replaceChildren()
-    const assigned = this._navSlot.assignedElements({ flatten: true })
+    const legacyAssigned = this._navSlot.assignedElements({ flatten: true })
+    const appAssigned = this._appNavSlot.assignedElements({ flatten: true })
+    const assigned = [...legacyAssigned, ...appAssigned]
+    const showHeading = appAssigned.length > 0 || this.sharedNav
+    if (assigned.length > 0 && showHeading) {
+      const heading = document.createElement('p')
+      heading.className = 'yh-sheet-heading'
+      heading.textContent = this.navLabel
+      this._sheetNav.appendChild(heading)
+    }
     for (const node of assigned) {
       const cloned = node.cloneNode(true)
       if (cloned instanceof HTMLElement) {
         cloned.removeAttribute('slot')
+        cloned.removeAttribute('id')
+        Array.from(cloned.querySelectorAll('[id]')).forEach((el) => el.removeAttribute('id'))
         cloned.addEventListener('click', (event) => {
-          const target = event.target as HTMLElement | null
+          const target = event.target instanceof Element ? event.target : null
           if (target?.closest('a')) {
             this._setSheetOpen(false, false)
           }
@@ -1475,11 +1944,17 @@ export class YunHeader extends HTMLElement {
     if (event.key !== 'Tab') {
       return
     }
+    const accountVisible = getComputedStyle(this._sheetAccount).display !== 'none'
     const focusables = Array.from(
       this._sheetDialog.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ),
-    ).filter((el) => !el.hasAttribute('hidden'))
+    ).filter(
+      (el) =>
+        !el.closest('[hidden]') &&
+        (accountVisible || !this._sheetAccount.contains(el)) &&
+        getComputedStyle(el).display !== 'none',
+    )
 
     if (focusables.length === 0) {
       return
@@ -1512,6 +1987,8 @@ export class YunHeader extends HTMLElement {
       this._sheetAccount.replaceChildren()
       this._accountButtonEl = null
       this._menuEl = null
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
       return
     }
 
@@ -1519,6 +1996,8 @@ export class YunHeader extends HTMLElement {
     this._sheetAccount.hidden = false
     this._renderDesktopAccount()
     this._renderSheetAccount()
+    this._autoCollapseWidth = 0
+    this._updateAutoCollapse()
   }
 
   private _renderDesktopAccount(): void {
@@ -1619,12 +2098,6 @@ export class YunHeader extends HTMLElement {
       profileLink.href = this.profileUrl
       profileLink.textContent = 'Hồ sơ'
 
-      const homeLink = document.createElement('a')
-      homeLink.className = 'yh-menu-item'
-      homeLink.setAttribute('role', 'menuitem')
-      homeLink.href = this.authBase
-      homeLink.textContent = 'Về YunDev.space'
-
       const divider = document.createElement('hr')
       divider.className = 'yh-menu-divider'
       divider.setAttribute('role', 'separator')
@@ -1639,7 +2112,16 @@ export class YunHeader extends HTMLElement {
         void this._handleLogout()
       })
 
-      menu.append(headerRow, profileLink, homeLink, divider, logoutBtn)
+      menu.append(headerRow, profileLink)
+      if (!this.sharedNav) {
+        const homeLink = document.createElement('a')
+        homeLink.className = 'yh-menu-item'
+        homeLink.setAttribute('role', 'menuitem')
+        homeLink.href = this.authBase
+        homeLink.textContent = 'Về YunDev.space'
+        menu.appendChild(homeLink)
+      }
+      menu.append(divider, logoutBtn)
 
       this._accountButtonEl = accountBtn
       this._menuEl = menu
@@ -1725,11 +2207,6 @@ export class YunHeader extends HTMLElement {
       profileLink.href = this.profileUrl
       profileLink.textContent = 'Hồ sơ'
 
-      const homeLink = document.createElement('a')
-      homeLink.className = 'yh-menu-item'
-      homeLink.href = this.authBase
-      homeLink.textContent = 'Về YunDev.space'
-
       const logoutBtn = document.createElement('button')
       logoutBtn.type = 'button'
       logoutBtn.className = 'yh-menu-item'
@@ -1739,7 +2216,15 @@ export class YunHeader extends HTMLElement {
         void this._handleLogout()
       })
 
-      actions.append(profileLink, homeLink, logoutBtn)
+      actions.appendChild(profileLink)
+      if (!this.sharedNav) {
+        const homeLink = document.createElement('a')
+        homeLink.className = 'yh-menu-item'
+        homeLink.href = this.authBase
+        homeLink.textContent = 'Về YunDev.space'
+        actions.appendChild(homeLink)
+      }
+      actions.appendChild(logoutBtn)
       this._sheetAccount.append(headerRow, actions)
       return
     }
