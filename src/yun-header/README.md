@@ -26,7 +26,7 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 | `app-actions` | App action controls placed before the shared link, theme toggle, and account block (`inline-flex`). Stays in the bar on mobile (not cloned into the sheet) so JS event listeners keep working. |
 | `brand` | Legacy alias for left-side brand content (unstyled, kept for backward compatibility). |
 | `nav` | Legacy alias for primary navigation links (unstyled, cloned into the mobile sheet before `app-nav`). |
-| `actions` | Legacy alias for action controls (unstyled, placed before `app-actions`). |
+| `actions` | Legacy alias for action controls (unstyled, placed after `app-actions` and `.yh-shared-link`, before the theme toggle). |
 
 ## App slots — single header bar (SLOT_API 1)
 
@@ -108,7 +108,7 @@ Pages that do not use `app-title`, `app-nav`, `app-actions`, `nav-label`, `colla
 
 ## Built-in Light / Dark Theme
 
-`<yun-header>` includes a built-in 42×42px light/dark toggle button in `.yh-right` (after `slot="actions"`, `slot="app-actions"`, and `.yh-shared-link`, and before the account block), visible at all viewport widths unless `no-theme-toggle` is set:
+`<yun-header>` includes a built-in 42×42px light/dark toggle button in `.yh-right` (after `slot="app-actions"`, `.yh-shared-link`, and `slot="actions"`, and before the account block), visible at all viewport widths unless `no-theme-toggle` is set:
 
 - Shows a moon icon while `light` and a sun icon while `dark` (`title` / `aria-label` = `"Chuyển chế độ sáng/tối"`, `aria-pressed="true"` when dark).
 - Read precedence: cookie `yun_theme` → `localStorage['yun-theme']` → legacy `localStorage['theme']` → `prefers-color-scheme: dark` (defaulting to `'light'`).

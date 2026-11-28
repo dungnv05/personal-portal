@@ -589,7 +589,6 @@ slot[name="app-actions"]::slotted(*) {
 
   .yh-mobile-toggle {
     display: inline-flex;
-    display: inline-flex;
   }
 
   .yh-shared-link {
@@ -1399,7 +1398,7 @@ export class YunHeader extends HTMLElement {
     this._sharedLink.hidden = true
     this._sharedLink.appendChild(createGridIcon())
 
-    right.append(actionsSlot, appActionsSlot, this._sharedLink, this._themeBtn, this._accountDesktop, this._mobileToggleBtn)
+    right.append(appActionsSlot, this._sharedLink, actionsSlot, this._themeBtn, this._accountDesktop, this._mobileToggleBtn)
     header.append(this._skipLink, left, nav, right)
 
     this._expiredNotice = document.createElement('div')
@@ -1740,9 +1739,7 @@ export class YunHeader extends HTMLElement {
       if (cloned instanceof HTMLElement) {
         cloned.removeAttribute('slot')
         cloned.removeAttribute('id')
-        for (const el of cloned.querySelectorAll('[id]')) {
-          el.removeAttribute('id')
-        }
+        Array.from(cloned.querySelectorAll('[id]')).forEach((el) => el.removeAttribute('id'))
         cloned.addEventListener('click', (event) => {
           const target = event.target as HTMLElement | null
           if (target?.closest('a')) {

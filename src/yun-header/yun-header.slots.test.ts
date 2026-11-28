@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineYunHeader, YUN_HEADER_SLOT_API, YunHeader } from './index'
 import { __resetRefreshCoordinatorForTests } from '../shared-auth/refreshCoordinator'
+import yunHeaderSource from './yun-header.ts?raw'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -44,7 +44,7 @@ describe('<yun-header> app slots (SLOT_API 1)', () => {
     await flushMicrotasks()
 
     const slotNames = Array.from(el.shadowRoot!.querySelectorAll('slot')).map((s) => s.getAttribute('name'))
-    expect(slotNames).toEqual(['brand', 'app-title', 'nav', 'app-nav', 'actions', 'app-actions'])
+    expect(slotNames).toEqual(['brand', 'app-title', 'nav', 'app-nav', 'app-actions', 'actions'])
   })
 
   it('(c) preserves legacy rendering when no app slots or new attributes are used', async () => {
@@ -235,12 +235,11 @@ describe('<yun-header> app slots (SLOT_API 1)', () => {
   })
 
   it('(k) keeps yun-header.ts free of unsafe DOM/eval patterns', () => {
-    const source = readFileSync(new URL('./yun-header.ts', import.meta.url), 'utf8')
-    expect(source).not.toMatch(/\binnerHTML\b/)
-    expect(source).not.toMatch(/\bouterHTML\b/)
-    expect(source).not.toMatch(/\binsertAdjacentHTML\b/)
-    expect(source).not.toMatch(/\beval\s*\(/)
-    expect(source).not.toMatch(/\bnew\s+Function\b/)
-    expect(source).not.toMatch(/['"`]\s*on[a-z]+\s*=/)
+    expect(yunHeaderSource).not.toMatch(/\binnerHTML\b/)
+    expect(yunHeaderSource).not.toMatch(/\bouterHTML\b/)
+    expect(yunHeaderSource).not.toMatch(/\binsertAdjacentHTML\b/)
+    expect(yunHeaderSource).not.toMatch(/\beval\s*\(/)
+    expect(yunHeaderSource).not.toMatch(/\bnew\s+Function\b/)
+    expect(yunHeaderSource).not.toMatch(/['"`]\s*on[a-z]+\s*=/)
   })
 })
