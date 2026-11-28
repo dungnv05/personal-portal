@@ -93,6 +93,10 @@ const STYLES = `
   min-width: 0;
 }
 
+.yh-left--app {
+  flex-shrink: 0;
+}
+
 .yh-nav {
   display: flex;
   align-items: center;
@@ -116,7 +120,7 @@ const STYLES = `
   height: 42px;
   padding: 0;
   border-radius: var(--yh-toggle-radius, 12px);
-  border: 1px solid var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1)));
+  border: 1px solid var(--yh-control-border, var(--yh-toggle-border, var(--yh-border, rgba(255, 255, 255, 0.1))));
   background: transparent;
   color: var(--yh-muted, #B8B3C7);
   cursor: pointer;
@@ -473,11 +477,13 @@ slot[name="app-title"]::slotted(*) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
   min-height: 44px;
   min-width: 0;
   color: var(--yh-ink, #F2EFF7);
   font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 slot[name="app-title"]::slotted(:focus-visible) {
@@ -489,6 +495,7 @@ slot[name="app-title"]::slotted(:focus-visible) {
 slot[name="app-nav"]::slotted(a) {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   min-height: 40px;
   padding: 0 10px;
   border-radius: calc(var(--yh-radius, 12px) - 4px);
@@ -523,7 +530,15 @@ slot[name="app-actions"]::slotted(*) {
 
 .yh-nav--app {
   flex: 1 1 auto;
-  justify-content: center;
+  justify-content: safe center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding-block: 4px;
+}
+
+.yh-nav--app::-webkit-scrollbar {
+  display: none;
 }
 
 .yh-shared-link {
@@ -608,21 +623,63 @@ slot[name="app-actions"]::slotted(*) {
 }
 
 @media (max-width: 1023px) {
-  :host([collapse="lg"]) .yh-nav {
+  :host([collapse="lg"]) .yh-nav,
+  :host([collapse="auto"]) .yh-nav {
     display: none;
   }
 
-  :host([collapse="lg"]) .yh-mobile-toggle {
+  :host([collapse="lg"]) .yh-mobile-toggle,
+  :host([collapse="auto"]) .yh-mobile-toggle {
     display: inline-flex;
   }
 
-  :host([collapse="lg"]) .yh-shared-link {
+  :host([collapse="lg"]) .yh-shared-link,
+  :host([collapse="auto"]) .yh-shared-link {
     display: none;
   }
 }
 
 @media (min-width: 641px) and (max-width: 1023px) {
-  :host([collapse="lg"]) .yh-sheet-account {
+  :host([collapse="lg"]) .yh-sheet-account,
+  :host([collapse="auto"]) .yh-sheet-account {
+    display: none;
+  }
+}
+
+@media (max-width: 1279px) {
+  :host([collapse="xl"]) .yh-nav {
+    display: none;
+  }
+
+  :host([collapse="xl"]) .yh-mobile-toggle {
+    display: inline-flex;
+  }
+
+  :host([collapse="xl"]) .yh-shared-link {
+    display: none;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1279px) {
+  :host([collapse="xl"]) .yh-sheet-account {
+    display: none;
+  }
+}
+
+.yh-bar.yh-collapsed .yh-nav {
+  display: none;
+}
+
+.yh-bar.yh-collapsed .yh-mobile-toggle {
+  display: inline-flex;
+}
+
+.yh-bar.yh-collapsed .yh-shared-link {
+  display: none;
+}
+
+@media (min-width: 641px) {
+  .yh-sheet-backdrop.yh-collapsed .yh-sheet-account {
     display: none;
   }
 }
@@ -996,6 +1053,9 @@ export class YunHeader extends HTMLElement {
   private _sheetDialog!: HTMLDivElement
   private _sheetCloseBtn!: HTMLButtonElement
   private _nav!: HTMLElement
+  private _bar!: HTMLElement
+  private _left!: HTMLDivElement
+  private _appTitleSlot!: HTMLSlotElement
   private _appNavSlot!: HTMLSlotElement
   private _sharedLink!: HTMLAnchorElement
   private _sheetNav!: HTMLElement
@@ -1005,6 +1065,8 @@ export class YunHeader extends HTMLElement {
   private _liveRegion!: HTMLDivElement
   private _accountButtonEl: HTMLButtonElement | null = null
   private _menuEl: HTMLDivElement | null = null
+  private _resizeObserver: ResizeObserver | null = null
+  private _autoCollapseWidth = 0
 
   private readonly _onWindowFocus = () => {
     void this.refresh()
@@ -1039,9 +1101,11 @@ export class YunHeader extends HTMLElement {
   }
 
   private readonly _onWindowResize = () => {
-    if (this._sheetOpen && getComputedStyle(this._mobileToggleBtn).display === 'none') {
-      this._setSheetOpen(false, false)
+    if (typeof ResizeObserver === 'undefined' && this.getAttribute('collapse') === 'auto') {
+      this._updateAutoCollapse()
+      return
     }
+    this._closeSheetIfToggleHidden()
   }
 
   private readonly _onThemeChange = () => {
@@ -1106,7 +1170,18 @@ export class YunHeader extends HTMLElement {
     this._ensureDom()
     this._syncAttributes()
     this._renderThemeButton()
+    this._syncAppTitleClass()
     this._syncAppNavClass()
+    this._setupResizeObserver()
+    this._updateAutoCollapse()
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        if (this.isConnected) {
+          this._autoCollapseWidth = 0
+          this._updateAutoCollapse()
+        }
+      })
+    }
     window.addEventListener('focus', this._onWindowFocus)
     window.addEventListener('resize', this._onWindowResize)
     document.addEventListener('visibilitychange', this._onVisibilityChange)
@@ -1117,6 +1192,8 @@ export class YunHeader extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    this._resizeObserver?.disconnect()
+    this._resizeObserver = null
     window.removeEventListener('focus', this._onWindowFocus)
     window.removeEventListener('resize', this._onWindowResize)
     document.removeEventListener('visibilitychange', this._onVisibilityChange)
@@ -1133,12 +1210,20 @@ export class YunHeader extends HTMLElement {
     this._syncAttributes()
     if (name === 'auth-base') {
       void this.refresh()
-    } else if (name === 'nav-label' || name === 'shared-nav') {
+    } else if (name === 'nav-label') {
       if (this._sheetOpen) {
         this._syncMobileNavClone()
       }
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    } else if (name === 'shared-nav') {
+      if (this._sheetOpen) {
+        this._syncMobileNavClone()
+      }
+      this._renderAccountRegions()
     } else if (name === 'collapse') {
-      this._onWindowResize()
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
     } else if (name === 'hide-account' || name === 'profile-url') {
       this._renderAccountRegions()
     }
@@ -1328,6 +1413,7 @@ export class YunHeader extends HTMLElement {
     styleEl.textContent = STYLES
 
     const header = document.createElement('header')
+    this._bar = header
     header.setAttribute('part', 'bar')
     header.className = 'yh-bar'
 
@@ -1336,11 +1422,22 @@ export class YunHeader extends HTMLElement {
     this._skipLink.textContent = 'Bỏ qua đến nội dung'
 
     const left = document.createElement('div')
+    this._left = left
     left.className = 'yh-left'
     const brandSlot = document.createElement('slot')
     brandSlot.name = 'brand'
+    brandSlot.addEventListener('slotchange', () => {
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
     const appTitleSlot = document.createElement('slot')
+    this._appTitleSlot = appTitleSlot
     appTitleSlot.name = 'app-title'
+    appTitleSlot.addEventListener('slotchange', () => {
+      this._syncAppTitleClass()
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
     left.append(brandSlot, appTitleSlot)
 
     this._nav = document.createElement('nav')
@@ -1353,6 +1450,8 @@ export class YunHeader extends HTMLElement {
       if (this._sheetOpen) {
         this._syncMobileNavClone()
       }
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
     })
     this._appNavSlot = document.createElement('slot')
     this._appNavSlot.name = 'app-nav'
@@ -1361,6 +1460,8 @@ export class YunHeader extends HTMLElement {
       if (this._sheetOpen) {
         this._syncMobileNavClone()
       }
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
     })
     nav.append(this._navSlot, this._appNavSlot)
 
@@ -1368,6 +1469,10 @@ export class YunHeader extends HTMLElement {
     right.className = 'yh-right'
     const actionsSlot = document.createElement('slot')
     actionsSlot.name = 'actions'
+    actionsSlot.addEventListener('slotchange', () => {
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
 
     this._themeBtn = document.createElement('button')
     this._themeBtn.type = 'button'
@@ -1395,6 +1500,10 @@ export class YunHeader extends HTMLElement {
 
     const appActionsSlot = document.createElement('slot')
     appActionsSlot.name = 'app-actions'
+    appActionsSlot.addEventListener('slotchange', () => {
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
+    })
 
     this._sharedLink = document.createElement('a')
     this._sharedLink.className = 'yh-btn yh-btn-icon yh-shared-link'
@@ -1507,9 +1616,84 @@ export class YunHeader extends HTMLElement {
     this._syncSheetSharedSection()
   }
 
+  private _syncAppTitleClass(): void {
+    const hasAppTitle = this._appTitleSlot.assignedElements({ flatten: true }).length > 0
+    this._left.classList.toggle('yh-left--app', hasAppTitle)
+  }
+
   private _syncAppNavClass(): void {
     const hasAppNav = this._appNavSlot.assignedElements({ flatten: true }).length > 0
     this._nav.classList.toggle('yh-nav--app', hasAppNav)
+  }
+
+  private _setupResizeObserver(): void {
+    this._resizeObserver?.disconnect()
+    this._resizeObserver = null
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+    this._resizeObserver = new ResizeObserver(() => {
+      this._updateAutoCollapse()
+    })
+    this._resizeObserver.observe(this._bar)
+  }
+
+  private _setCollapsed(collapsed: boolean): void {
+    this._bar.classList.toggle('yh-collapsed', collapsed)
+    this._sheetBackdrop.classList.toggle('yh-collapsed', collapsed)
+  }
+
+  private _closeSheetIfToggleHidden(): void {
+    if (this._sheetOpen && getComputedStyle(this._mobileToggleBtn).display === 'none') {
+      this._setSheetOpen(false, false)
+    }
+  }
+
+  private _navOverflows(): boolean {
+    if (getComputedStyle(this._nav).display === 'none') {
+      return false
+    }
+    return (
+      this._nav.scrollWidth > this._nav.clientWidth + 1 ||
+      this._bar.scrollWidth > this._bar.clientWidth + 1
+    )
+  }
+
+  private _updateAutoCollapse(): void {
+    if (!this._rendered) {
+      return
+    }
+    if (this.getAttribute('collapse') !== 'auto') {
+      this._autoCollapseWidth = 0
+      this._setCollapsed(false)
+      this._closeSheetIfToggleHidden()
+      return
+    }
+    if (typeof ResizeObserver === 'undefined') {
+      this._setCollapsed(window.innerWidth <= 1279)
+      this._closeSheetIfToggleHidden()
+      return
+    }
+    const barWidth = this._bar.clientWidth
+    if (barWidth <= 0) {
+      return
+    }
+    const isCollapsed = this._bar.classList.contains('yh-collapsed')
+    if (!isCollapsed) {
+      if (this._navOverflows()) {
+        this._setCollapsed(true)
+        this._autoCollapseWidth = barWidth
+      }
+    } else if (barWidth > this._autoCollapseWidth) {
+      this._setCollapsed(false)
+      if (this._navOverflows()) {
+        this._setCollapsed(true)
+        this._autoCollapseWidth = barWidth
+      } else {
+        this._autoCollapseWidth = 0
+      }
+    }
+    this._closeSheetIfToggleHidden()
   }
 
   private _syncSheetSharedSection(): void {
@@ -1803,6 +1987,8 @@ export class YunHeader extends HTMLElement {
       this._sheetAccount.replaceChildren()
       this._accountButtonEl = null
       this._menuEl = null
+      this._autoCollapseWidth = 0
+      this._updateAutoCollapse()
       return
     }
 
@@ -1810,6 +1996,8 @@ export class YunHeader extends HTMLElement {
     this._sheetAccount.hidden = false
     this._renderDesktopAccount()
     this._renderSheetAccount()
+    this._autoCollapseWidth = 0
+    this._updateAutoCollapse()
   }
 
   private _renderDesktopAccount(): void {
@@ -1910,12 +2098,6 @@ export class YunHeader extends HTMLElement {
       profileLink.href = this.profileUrl
       profileLink.textContent = 'Hồ sơ'
 
-      const homeLink = document.createElement('a')
-      homeLink.className = 'yh-menu-item'
-      homeLink.setAttribute('role', 'menuitem')
-      homeLink.href = this.authBase
-      homeLink.textContent = 'Về YunDev.space'
-
       const divider = document.createElement('hr')
       divider.className = 'yh-menu-divider'
       divider.setAttribute('role', 'separator')
@@ -1930,7 +2112,16 @@ export class YunHeader extends HTMLElement {
         void this._handleLogout()
       })
 
-      menu.append(headerRow, profileLink, homeLink, divider, logoutBtn)
+      menu.append(headerRow, profileLink)
+      if (!this.sharedNav) {
+        const homeLink = document.createElement('a')
+        homeLink.className = 'yh-menu-item'
+        homeLink.setAttribute('role', 'menuitem')
+        homeLink.href = this.authBase
+        homeLink.textContent = 'Về YunDev.space'
+        menu.appendChild(homeLink)
+      }
+      menu.append(divider, logoutBtn)
 
       this._accountButtonEl = accountBtn
       this._menuEl = menu
@@ -2016,11 +2207,6 @@ export class YunHeader extends HTMLElement {
       profileLink.href = this.profileUrl
       profileLink.textContent = 'Hồ sơ'
 
-      const homeLink = document.createElement('a')
-      homeLink.className = 'yh-menu-item'
-      homeLink.href = this.authBase
-      homeLink.textContent = 'Về YunDev.space'
-
       const logoutBtn = document.createElement('button')
       logoutBtn.type = 'button'
       logoutBtn.className = 'yh-menu-item'
@@ -2030,7 +2216,15 @@ export class YunHeader extends HTMLElement {
         void this._handleLogout()
       })
 
-      actions.append(profileLink, homeLink, logoutBtn)
+      actions.appendChild(profileLink)
+      if (!this.sharedNav) {
+        const homeLink = document.createElement('a')
+        homeLink.className = 'yh-menu-item'
+        homeLink.href = this.authBase
+        homeLink.textContent = 'Về YunDev.space'
+        actions.appendChild(homeLink)
+      }
+      actions.appendChild(logoutBtn)
       this._sheetAccount.append(headerRow, actions)
       return
     }

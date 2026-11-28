@@ -355,4 +355,217 @@ describe('<yun-header> app slots (SLOT_API 1)', () => {
     el.setAttribute('collapse', 'md')
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('false')
   })
+
+  it('(q) accepts collapse="xl" and collapse="auto" and includes 1279px and .yh-collapsed rules in STYLES', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('collapse', 'xl')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const styleText = Array.from(el.shadowRoot!.querySelectorAll('style'))
+      .map((s) => s.textContent ?? '')
+      .join('\n')
+
+    expect(styleText).toContain('max-width: 1279px')
+    expect(styleText).toContain(':host([collapse="xl"])')
+    expect(styleText).toContain(':host([collapse="auto"])')
+    expect(styleText).toContain('.yh-bar.yh-collapsed')
+    expect(styleText).toContain('.yh-sheet-backdrop.yh-collapsed .yh-sheet-account')
+
+    el.setAttribute('collapse', 'auto')
+    expect(el.getAttribute('collapse')).toBe('auto')
+  })
+
+  it('(r) auto collapse toggles yh-collapsed via ResizeObserver with hysteresis', async () => {
+    let roCallback: ResizeObserverCallback | null = null
+    class MockResizeObserver {
+      constructor(cb: ResizeObserverCallback) {
+        roCallback = cb
+      }
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('collapse', 'auto')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const shadow = el.shadowRoot!
+    const bar = shadow.querySelector<HTMLElement>('.yh-bar')!
+    const nav = shadow.querySelector<HTMLElement>('.yh-nav')!
+    const backdrop = shadow.querySelector<HTMLElement>('.yh-sheet-backdrop')!
+
+    let barClientWidth = 1200
+    let navClientWidth = 500
+    let navScrollWidth = 800
+    Object.defineProperty(bar, 'clientWidth', { configurable: true, get: () => barClientWidth })
+    Object.defineProperty(bar, 'scrollWidth', { configurable: true, get: () => barClientWidth })
+    Object.defineProperty(nav, 'clientWidth', { configurable: true, get: () => navClientWidth })
+    Object.defineProperty(nav, 'scrollWidth', { configurable: true, get: () => navScrollWidth })
+
+    roCallback?.([], {} as ResizeObserver)
+    expect(bar.classList.contains('yh-collapsed')).toBe(true)
+    expect(backdrop.classList.contains('yh-collapsed')).toBe(true)
+
+    barClientWidth = 1250
+    roCallback?.([], {} as ResizeObserver)
+    expect(bar.classList.contains('yh-collapsed')).toBe(true)
+    expect(backdrop.classList.contains('yh-collapsed')).toBe(true)
+
+    barClientWidth = 1400
+    navClientWidth = 700
+    navScrollWidth = 700
+    roCallback?.([], {} as ResizeObserver)
+    expect(bar.classList.contains('yh-collapsed')).toBe(false)
+    expect(backdrop.classList.contains('yh-collapsed')).toBe(false)
+  })
+
+  it('(s) auto collapse never collapses when bar.clientWidth is 0', async () => {
+    let roCallback: ResizeObserverCallback | null = null
+    class MockResizeObserver {
+      constructor(cb: ResizeObserverCallback) {
+        roCallback = cb
+      }
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('collapse', 'auto')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const shadow = el.shadowRoot!
+    const bar = shadow.querySelector<HTMLElement>('.yh-bar')!
+    const nav = shadow.querySelector<HTMLElement>('.yh-nav')!
+    Object.defineProperty(bar, 'clientWidth', { configurable: true, get: () => 0 })
+    Object.defineProperty(nav, 'clientWidth', { configurable: true, get: () => 100 })
+    Object.defineProperty(nav, 'scrollWidth', { configurable: true, get: () => 500 })
+
+    roCallback?.([], {} as ResizeObserver)
+    expect(bar.classList.contains('yh-collapsed')).toBe(false)
+  })
+
+  it('(t) auto collapse falls back to window.innerWidth <= 1279 when ResizeObserver is unavailable', async () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1200 })
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('collapse', 'auto')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const bar = el.shadowRoot!.querySelector<HTMLElement>('.yh-bar')!
+    expect(bar.classList.contains('yh-collapsed')).toBe(true)
+
+    window.innerWidth = 1400
+    window.dispatchEvent(new Event('resize'))
+    expect(bar.classList.contains('yh-collapsed')).toBe(false)
+  })
+
+  it('(u) disconnects ResizeObserver on disconnectedCallback and observes again on reconnect', async () => {
+    const observeSpy = vi.fn()
+    const disconnectSpy = vi.fn()
+    class MockResizeObserver {
+      observe = observeSpy
+      unobserve = vi.fn()
+      disconnect = disconnectSpy
+    }
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('collapse', 'auto')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    expect(observeSpy).toHaveBeenCalledTimes(1)
+    expect(disconnectSpy).not.toHaveBeenCalled()
+
+    el.remove()
+    expect(disconnectSpy).toHaveBeenCalledTimes(1)
+
+    document.body.appendChild(el)
+    await flushMicrotasks()
+    expect(observeSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('(v) omits "Về YunDev.space" in dropdown and sheet account when shared-nav is set', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          ok: true,
+          user: { id: 'u1', email: 'yun@yundev.space', display_name: 'Yun' },
+        }),
+      ),
+    )
+
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('shared-nav', '')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const shadow = el.shadowRoot!
+    const dropdownTexts = Array.from(shadow.querySelectorAll('.yh-menu .yh-menu-item')).map(
+      (n) => n.textContent,
+    )
+    const sheetTexts = Array.from(shadow.querySelectorAll('.yh-sheet-account .yh-menu-item')).map(
+      (n) => n.textContent,
+    )
+    expect(dropdownTexts).not.toContain('Về YunDev.space')
+    expect(sheetTexts).not.toContain('Về YunDev.space')
+
+    el.removeAttribute('shared-nav')
+    const dropdownTextsAfter = Array.from(shadow.querySelectorAll('.yh-menu .yh-menu-item')).map(
+      (n) => n.textContent,
+    )
+    const sheetTextsAfter = Array.from(shadow.querySelectorAll('.yh-sheet-account .yh-menu-item')).map(
+      (n) => n.textContent,
+    )
+    expect(dropdownTextsAfter).toContain('Về YunDev.space')
+    expect(sheetTextsAfter).toContain('Về YunDev.space')
+  })
+
+  it('(w) uses --yh-control-border first on .yh-theme-toggle and keeps .yh-mobile-toggle unchanged', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const styleText = Array.from(el.shadowRoot!.querySelectorAll('style'))
+      .map((s) => s.textContent ?? '')
+      .join('\n')
+
+    expect(styleText).toMatch(
+      /\.yh-theme-toggle\s*\{[^}]*border:\s*1px\s+solid\s+var\(--yh-control-border,\s*var\(--yh-toggle-border,/,
+    )
+    expect(styleText).toMatch(
+      /\.yh-mobile-toggle\s*\{[^}]*border-color:\s*var\(--yh-control-border,\s*var\(--yh-muted,\s*#B8B3C7\)\)/,
+    )
+  })
+
+  it('(x) toggles .yh-left--app on app-title slotchange', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const left = el.shadowRoot!.querySelector<HTMLElement>('.yh-left')!
+    expect(left.classList.contains('yh-left--app')).toBe(false)
+
+    const title = document.createElement('a')
+    title.slot = 'app-title'
+    title.href = '/'
+    title.textContent = 'BrSE Study'
+    el.appendChild(title)
+    await flushMicrotasks()
+    expect(left.classList.contains('yh-left--app')).toBe(true)
+
+    title.remove()
+    await flushMicrotasks()
+    expect(left.classList.contains('yh-left--app')).toBe(false)
+  })
 })
