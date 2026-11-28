@@ -1,5 +1,6 @@
 import {
   isAllowedAuthOrigin,
+  YUN_HEADER_SLOT_API,
   YunHeader,
   type YunHeaderApp,
   type YunHeaderAuthChangeDetail,
@@ -28,6 +29,7 @@ export {
   THEME_COOKIE,
   THEME_EVENT,
   THEME_STORAGE_KEY,
+  YUN_HEADER_SLOT_API,
   YunHeader,
   type YunHeaderApp,
   type YunHeaderAuthChangeDetail,
