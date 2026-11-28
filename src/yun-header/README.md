@@ -14,7 +14,7 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 | `skip-target` | `string` | `"#main"` | `href` for the skip link ("Bỏ qua đến nội dung"). Must match `/^#[A-Za-z][\w-]*$/`; otherwise falls back to `"#main"`. |
 | `no-theme-toggle` | `boolean` | `false` | Hides the built-in light/dark theme toggle button (escape hatch). |
 | `nav-label` | `string` | `"Điều hướng chính"` | Accessible `aria-label` for the `<nav>` landmark (desktop and mobile sheet) and the mobile sheet nav heading when app slots are used. Trimmed, control characters stripped, max 60 characters; empty/invalid falls back to `"Điều hướng chính"`. |
-| `collapse` | `"md" \| "lg" \| "xl" \| "auto"` | `"md"` | Mode at which `.yh-nav` (and `.yh-shared-link`) collapse into the mobile menu sheet: `"md"` (`<=640px`), `"lg"` (`<=1023px`), `"xl"` (`<=1279px`), or `"auto"` (collapses at `<=1023px` and dynamically via `ResizeObserver` above `1023px` when `.yh-nav` overflows; falls back to `<=1279px` without `ResizeObserver`). Desktop account stays in the bar above `640px`. Changing `collapse` or resizing out of collapsed state closes an open sheet automatically. |
+| `collapse` | `"lg" \| "xl" \| "auto"` | `(unset)` | Mode at which `.yh-nav` (and `.yh-shared-link`) collapse into the mobile menu sheet: unset / default (`<=640px`), `"lg"` (`<=1023px`), `"xl"` (`<=1279px`), or `"auto"` (collapses at `<=1023px` and dynamically via `ResizeObserver` above `1023px` when `.yh-nav` overflows; falls back to `<=1279px` without `ResizeObserver`). Desktop account stays in the bar above `640px`. Changing `collapse` or resizing out of collapsed state closes an open sheet automatically. |
 | `shared-nav` | `boolean` | `false` | Opt-in. Renders a desktop 4-square grid icon link (`Về YunDev.space` → `${authBase}/`) before the theme toggle (hidden when collapsed) and a `YunDev.space` section in the mobile sheet. |
 
 ## Slots
@@ -48,7 +48,7 @@ Use `aria-current="page"` on the active `<a slot="app-nav">` link to highlight i
 **Overflow guard & plain-`href` links:** `.yh-nav--app` applies `justify-content: safe center` with `overflow-x: auto` (hidden scrollbar) and `flex: 0 0 auto; white-space: nowrap` on slotted links, while `app-title` + `.yh-left--app` set `flex-shrink: 0; white-space: nowrap` so titles never wrap or overlap right-hand controls. `app-nav` links must be plain `<a href="...">` links because their clones inside `#yh-sheet` do not keep light-DOM JS event listeners.
 
 **Choosing `collapse` (`lg` / `xl` / `auto`):**
-- `md` (default): collapses at `<=640px` for minimal headers.
+- unset / default: collapses at `<=640px` for minimal headers.
 - `lg` (`<=1023px`) / `xl` (`<=1279px`): static breakpoints for fixed-width navs; desktop account stays in the bar above `640px` (`.yh-account-name` hidden at `641px–1023px`).
 - `auto` (recommended for any app whose nav width is not fixed): always collapsed at `<=1023px`, and above `1023px` uses `ResizeObserver` on `.yh-bar` with hysteresis to collapse only when `.yh-nav` overflows (falling back to `<=1279px` when `ResizeObserver` is unavailable). An open sheet closes automatically whenever the toggle becomes hidden on collapse/resize changes.
 

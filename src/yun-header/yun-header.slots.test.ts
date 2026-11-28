@@ -377,10 +377,10 @@ describe('<yun-header> app slots (SLOT_API 1)', () => {
   })
 
   it('(r) auto collapse toggles yh-collapsed via ResizeObserver with hysteresis', async () => {
-    let roCallback: ResizeObserverCallback | null = null
+    const ro: { cb: ResizeObserverCallback | null } = { cb: null }
     class MockResizeObserver {
       constructor(cb: ResizeObserverCallback) {
-        roCallback = cb
+        ro.cb = cb
       }
       observe = vi.fn()
       unobserve = vi.fn()
@@ -406,28 +406,28 @@ describe('<yun-header> app slots (SLOT_API 1)', () => {
     Object.defineProperty(nav, 'clientWidth', { configurable: true, get: () => navClientWidth })
     Object.defineProperty(nav, 'scrollWidth', { configurable: true, get: () => navScrollWidth })
 
-    roCallback?.([], {} as ResizeObserver)
+    ro.cb?.([], {} as ResizeObserver)
     expect(bar.classList.contains('yh-collapsed')).toBe(true)
     expect(backdrop.classList.contains('yh-collapsed')).toBe(true)
 
     barClientWidth = 1250
-    roCallback?.([], {} as ResizeObserver)
+    ro.cb?.([], {} as ResizeObserver)
     expect(bar.classList.contains('yh-collapsed')).toBe(true)
     expect(backdrop.classList.contains('yh-collapsed')).toBe(true)
 
     barClientWidth = 1400
     navClientWidth = 700
     navScrollWidth = 700
-    roCallback?.([], {} as ResizeObserver)
+    ro.cb?.([], {} as ResizeObserver)
     expect(bar.classList.contains('yh-collapsed')).toBe(false)
     expect(backdrop.classList.contains('yh-collapsed')).toBe(false)
   })
 
   it('(s) auto collapse never collapses when bar.clientWidth is 0', async () => {
-    let roCallback: ResizeObserverCallback | null = null
+    const ro: { cb: ResizeObserverCallback | null } = { cb: null }
     class MockResizeObserver {
       constructor(cb: ResizeObserverCallback) {
-        roCallback = cb
+        ro.cb = cb
       }
       observe = vi.fn()
       unobserve = vi.fn()
@@ -447,7 +447,7 @@ describe('<yun-header> app slots (SLOT_API 1)', () => {
     Object.defineProperty(nav, 'clientWidth', { configurable: true, get: () => 100 })
     Object.defineProperty(nav, 'scrollWidth', { configurable: true, get: () => 500 })
 
-    roCallback?.([], {} as ResizeObserver)
+    ro.cb?.([], {} as ResizeObserver)
     expect(bar.classList.contains('yh-collapsed')).toBe(false)
   })
 
