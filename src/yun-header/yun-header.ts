@@ -480,6 +480,12 @@ slot[name="app-title"]::slotted(*) {
   text-decoration: none;
 }
 
+slot[name="app-title"]::slotted(:focus-visible) {
+  outline: 2px solid var(--yh-focus, #A78BFA);
+  outline-offset: 2px;
+  border-radius: calc(var(--yh-radius, 12px) - 4px);
+}
+
 slot[name="app-nav"]::slotted(a) {
   display: inline-flex;
   align-items: center;
@@ -1126,14 +1132,13 @@ export class YunHeader extends HTMLElement {
     }
     this._syncAttributes()
     if (name === 'auth-base') {
-      if (this._sheetOpen) {
-        this._syncMobileNavClone()
-      }
       void this.refresh()
     } else if (name === 'nav-label' || name === 'shared-nav') {
       if (this._sheetOpen) {
         this._syncMobileNavClone()
       }
+    } else if (name === 'collapse') {
+      this._onWindowResize()
     } else if (name === 'hide-account' || name === 'profile-url') {
       this._renderAccountRegions()
     }
@@ -1741,7 +1746,7 @@ export class YunHeader extends HTMLElement {
         cloned.removeAttribute('id')
         Array.from(cloned.querySelectorAll('[id]')).forEach((el) => el.removeAttribute('id'))
         cloned.addEventListener('click', (event) => {
-          const target = event.target as HTMLElement | null
+          const target = event.target instanceof Element ? event.target : null
           if (target?.closest('a')) {
             this._setSheetOpen(false, false)
           }
@@ -1755,11 +1760,17 @@ export class YunHeader extends HTMLElement {
     if (event.key !== 'Tab') {
       return
     }
+    const accountVisible = getComputedStyle(this._sheetAccount).display !== 'none'
     const focusables = Array.from(
       this._sheetDialog.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ),
-    ).filter((el) => !el.hasAttribute('hidden'))
+    ).filter(
+      (el) =>
+        !el.closest('[hidden]') &&
+        (accountVisible || !this._sheetAccount.contains(el)) &&
+        getComputedStyle(el).display !== 'none',
+    )
 
     if (focusables.length === 0) {
       return

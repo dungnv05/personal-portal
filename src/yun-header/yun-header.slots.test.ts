@@ -242,4 +242,117 @@ describe('<yun-header> app slots (SLOT_API 1)', () => {
     expect(yunHeaderSource).not.toMatch(/\bnew\s+Function\b/)
     expect(yunHeaderSource).not.toMatch(/['"`]\s*on[a-z]+\s*=/)
   })
+
+  it('(l) closes the mobile sheet when clicking the .yh-sheet-section link', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('shared-nav', '')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const shadow = el.shadowRoot!
+    const toggleBtn = shadow.querySelector<HTMLButtonElement>('.yh-mobile-toggle')!
+    toggleBtn.click()
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true')
+
+    const sectionLink = shadow.querySelector<HTMLAnchorElement>('.yh-sheet-section a')!
+    sectionLink.addEventListener('click', (event) => event.preventDefault())
+    sectionLink.click()
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('(m) falls back to https://www.yundev.space/ for .yh-shared-link when auth-base is disallowed', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('shared-nav', '')
+    el.setAttribute('auth-base', 'https://evil.example')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const sharedLink = el.shadowRoot!.querySelector<HTMLAnchorElement>('.yh-shared-link')!
+    expect(sharedLink.getAttribute('href')).toBe('https://www.yundev.space/')
+  })
+
+  it('(n) skips hidden .yh-sheet-account controls in the sheet focus trap', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('shared-nav', '')
+    el.setAttribute('collapse', 'lg')
+
+    const link1 = document.createElement('a')
+    link1.slot = 'app-nav'
+    link1.href = '/one'
+    link1.textContent = 'One'
+
+    const link2 = document.createElement('a')
+    link2.slot = 'app-nav'
+    link2.href = '/two'
+    link2.textContent = 'Two'
+
+    el.append(link1, link2)
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const shadow = el.shadowRoot!
+    shadow.querySelector<HTMLButtonElement>('.yh-mobile-toggle')!.click()
+
+    const sheetAccount = shadow.querySelector<HTMLElement>('.yh-sheet-account')!
+    sheetAccount.style.display = 'none'
+
+    const sheet = shadow.querySelector<HTMLElement>('.yh-sheet')!
+    const closeBtn = shadow.querySelector<HTMLButtonElement>('.yh-sheet-header button')!
+    const lastVisibleLink = shadow.querySelector<HTMLAnchorElement>('.yh-sheet-section a')!
+
+    lastVisibleLink.focus()
+    expect(shadow.activeElement).toBe(lastVisibleLink)
+
+    sheet.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, composed: true }))
+    expect(shadow.activeElement).toBe(closeBtn)
+
+    sheet.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, composed: true }))
+    expect(shadow.activeElement).toBe(lastVisibleLink)
+  })
+
+  it('(o) removes .yh-nav--app when all app-nav links are removed after render', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    const link = document.createElement('a')
+    link.slot = 'app-nav'
+    link.href = '/roadmap'
+    link.textContent = 'Lộ trình'
+    el.appendChild(link)
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const nav = el.shadowRoot!.querySelector<HTMLElement>('.yh-nav')!
+    expect(nav.classList.contains('yh-nav--app')).toBe(true)
+
+    link.remove()
+    await flushMicrotasks()
+    expect(nav.classList.contains('yh-nav--app')).toBe(false)
+  })
+
+  it('(p) closes an open sheet when collapse changes and the mobile toggle becomes hidden', async () => {
+    const el = document.createElement('yun-header') as YunHeader
+    el.setAttribute('collapse', 'lg')
+    document.body.appendChild(el)
+    await flushMicrotasks()
+
+    const shadow = el.shadowRoot!
+    const toggleBtn = shadow.querySelector<HTMLButtonElement>('.yh-mobile-toggle')!
+    toggleBtn.click()
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true')
+
+    const origGetComputedStyle = window.getComputedStyle.bind(window)
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((target, pseudoElt) => {
+      const style = origGetComputedStyle(target, pseudoElt)
+      if (target === toggleBtn) {
+        return new Proxy(style, {
+          get(obj, prop) {
+            return prop === 'display' ? 'none' : Reflect.get(obj, prop, obj)
+          },
+        })
+      }
+      return style
+    })
+
+    el.setAttribute('collapse', 'md')
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false')
+  })
 })

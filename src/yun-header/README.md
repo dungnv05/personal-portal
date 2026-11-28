@@ -14,7 +14,7 @@ Framework-free Web Component for the shared YunDev ecosystem header (`*.yundev.s
 | `skip-target` | `string` | `"#main"` | `href` for the skip link ("Bỏ qua đến nội dung"). Must match `/^#[A-Za-z][\w-]*$/`; otherwise falls back to `"#main"`. |
 | `no-theme-toggle` | `boolean` | `false` | Hides the built-in light/dark theme toggle button (escape hatch). |
 | `nav-label` | `string` | `"Điều hướng chính"` | Accessible `aria-label` for the `<nav>` landmark (desktop and mobile sheet) and the mobile sheet nav heading when app slots are used. Trimmed, control characters stripped, max 60 characters; empty/invalid falls back to `"Điều hướng chính"`. |
-| `collapse` | `"md" \| "lg"` | `"md"` | Breakpoint at which `.yh-nav` (and `.yh-shared-link`) collapse into the mobile menu sheet: `"md"` (`<=640px`) or `"lg"` (`<=1023px`, keeping the desktop account block visible at `641px–1023px`). |
+| `collapse` | `"md" \| "lg"` | `"md"` | Breakpoint at which `.yh-nav` (and `.yh-shared-link`) collapse into the mobile menu sheet: `"md"` (`<=640px`) or `"lg"` (`<=1023px`, keeping the desktop account block visible at `641px–1023px`). Changing `collapse` closes an open sheet if the mobile toggle becomes hidden. |
 | `shared-nav` | `boolean` | `false` | Opt-in. Renders a desktop 4-square grid icon link (`Về YunDev.space` → `${authBase}/`) before the theme toggle (hidden when collapsed) and a `YunDev.space` section in the mobile sheet. |
 
 ## Slots
@@ -50,7 +50,7 @@ Use `aria-current="page"` on the active `<a slot="app-nav">` link to highlight i
 When the mobile sheet (`#yh-sheet`) opens:
 1. **App & legacy navigation**: Clones assigned elements from `nav` (first) and `app-nav` (second) into `<nav class="yh-sheet-nav">`. Every `slot` attribute and every `id` attribute in the cloned subtree is stripped to prevent duplicate IDs, while `aria-current` is preserved. When `app-nav` has items or `shared-nav` is set, a `<p class="yh-sheet-heading">` with `nav-label` is rendered above the links.
 2. **YunDev.space section**: When `shared-nav` is present, a `<div class="yh-sheet-section">` with heading `YunDev.space` and link `Về trang chủ YunDev.space` → `${authBase}/` is rendered after the nav.
-3. **Account block**: Rendered at the bottom (hidden on `641px–1023px` when `collapse="lg"` since the desktop account button remains visible there).
+3. **Account block**: Rendered at the bottom (hidden on `641px–1023px` when `collapse="lg"` since the desktop account button remains visible there). The sheet's `Tab` / `Shift+Tab` focus trap skips hidden elements and hidden containers (such as `.yh-sheet-account` when `display: none`).
 4. **`app-actions` are NOT cloned**: Controls in `app-actions` remain in `.yh-right` at all viewport widths so their DOM state and JS event listeners keep working without duplication.
 
 ### Feature Detection & Fallback
